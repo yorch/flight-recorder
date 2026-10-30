@@ -1,0 +1,101 @@
+networks:
+  sandbox:
+    internal: true
+  egress:
+
+services:
+  browser:
+    build:
+      context: ../arm-a/browser
+      args: &proxy_args
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        no_proxy: ${no_proxy:-}
+        NO_PROXY: ${NO_PROXY:-}
+    platform: linux/arm64
+    init: true
+    ipc: shareable
+    shm_size: 2gb
+    security_opt:
+      - seccomp=../seccomp_profile.json
+    networks: [sandbox]
+    volumes:
+      - x11:/tmp/.X11-unix
+    environment:
+      DISPLAY: ":99"
+      SCREEN_WIDTH: "1920"
+      SCREEN_HEIGHT: "1080"
+      CHROME_EXTRA_ARGS: "--proxy-server=http://proxy:3128"
+      CHROME_NO_SANDBOX: "0"
+      CHROME_DISABLE_GPU: "1"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9222/json/version"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  proxy:
+    build:
+      context: ./proxy
+      args: *proxy_args
+    platform: linux/arm64
+    init: true
+    networks: [sandbox, egress]
+    environment:
+      TEST_FILE: ${TEST_FILE:-/spec/test.json}
+      AGENT_EGRESS_HOSTS: ${AGENT_EGRESS_HOSTS:-llm.test:8080}
+      UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}
+    volumes:
+      - ./spec:/spec:ro
+      - ../results/proxy/squid:/var/log/squid-pair
+
+  internet:
+    build:
+      context: ./internet
+      args: *proxy_args
+    platform: linux/arm64
+    init: true
+    networks:
+      egress:
+        aliases:
+          - allowed.test
+          - evil.test
+          - a.cdn.test
+          - llm.test
+    volumes:
+      - ../results/proxy/internet:/log
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: proxy/orchestrator/Dockerfile
+      args: *proxy_args
+    platform: linux/arm64
+    init: true
+    network_mode: "service:browser"
+    ipc: "service:browser"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      browser:
+        condition: service_healthy
+      proxy:
+        condition: service_started
+    volumes:
+      - x11:/tmp/.X11-unix
+      - ../results/proxy:/results
+    environment:
+      DISPLAY: ":99"
+      CDP_URL: http://127.0.0.1:9222
+      RESULTS_DIR: /results
+      MODE: ${MODE:-full}
+      NODE_USE_ENV_PROXY: "1"
+      HTTP_PROXY: http://proxy:3129
+      HTTPS_PROXY: http://proxy:3129
+      NO_PROXY: localhost,127.0.0.1
+
+volumes:
+  x11:

@@ -1,0 +1,29 @@
+{
+  "native_ts": true,
+  "node_version": "v26.13.0",
+  "screen_invariant": {
+    "screenX": 0,
+    "screenY": 0,
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "devicePixelRatio": 1
+  },
+  "canvas_click_cdp": true,
+  "canvas_click_os": true,
+  "xorigin_iframe_click_cdp": true,
+  "xorigin_iframe_click_os": true,
+  "confirm_default": {
+    "value": false,
+    "error": null,
+    "responsive": true
+  },
+  "webgl_default": null,
+  "sandbox": {
+    "text": "Sandbox Status\nLayer 1 Sandbox\tNamespace\nPID namespaces\tYes\nNetwork namespaces\tYes\nSeccomp-BPF sandbox\tYes\nSeccomp-BPF sandbox supports TSYNC\tYes\nPtrace Protection with Yama LSM (Broker)\tNo\nPtrace Protection with Yama LSM (Non-broker)\tNo\n\nYou are adequately sandboxed.",
+    "error": null,
+    "chrome_sandbox_mode": "seccomp+caps-dropped",
+    "seccomp_profile_used": true,
+    "no_sandbox_flag_used": false
+  },
+  "webgl_swiftshader": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)"
+}

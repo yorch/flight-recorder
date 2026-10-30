@@ -1,0 +1,7 @@
+{
+  "name": "proxy-egress",
+  "start_url": "https://example.com",
+  "goal": "n/a",
+  "allowed_origins": ["https://example.com"],
+  "allowed_hosts": []
+}

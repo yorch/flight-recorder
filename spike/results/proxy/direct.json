@@ -1,0 +1,39 @@
+{
+  "internet_egress_ip": "172.19.0.2",
+  "direct_egress_browser": {
+    "getent_evil": {
+      "rc": 2,
+      "output": ""
+    },
+    "getent_example": {
+      "rc": 2,
+      "output": ""
+    },
+    "getent_proxy": {
+      "rc": 0,
+      "output": "172.18.0.2      proxy"
+    },
+    "tcp_internet": {
+      "rc": 0,
+      "output": "bash: connect: Network is unreachable\nbash: line 1: /dev/tcp/172.19.0.2/8080: Network is unreachable\nFAILED:1"
+    }
+  },
+  "direct_egress_orchestrator": {
+    "getent_evil": {
+      "rc": 1,
+      "output": " Container spike-proxy-orchestrator-run-c36681d2acb3 Creating \n Container spike-proxy-orchestrator-run-c36681d2acb3 Created \nError: getaddrinfo EAI_AGAIN evil.test"
+    },
+    "getent_example": {
+      "rc": 1,
+      "output": " Container spike-proxy-orchestrator-run-d5525e12ab8b Creating \n Container spike-proxy-orchestrator-run-d5525e12ab8b Created \nError: getaddrinfo EAI_AGAIN example.com"
+    },
+    "getent_proxy": {
+      "rc": 0,
+      "output": " Container spike-proxy-orchestrator-run-f9b7c6bcd2e3 Creating \n Container spike-proxy-orchestrator-run-f9b7c6bcd2e3 Created \n172.18.0.2"
+    },
+    "tcp_internet": {
+      "rc": 1,
+      "output": " Container spike-proxy-orchestrator-run-cdc9c8eeedf8 Creating \n Container spike-proxy-orchestrator-run-cdc9c8eeedf8 Created \nERR ENETUNREACH"
+    }
+  }
+}

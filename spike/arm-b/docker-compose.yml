@@ -1,0 +1,57 @@
+services:
+  browser:
+    build:
+      context: ./browser
+      args: &proxy_args
+        http_proxy: ${http_proxy:-}
+        https_proxy: ${https_proxy:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        no_proxy: ${no_proxy:-}
+        NO_PROXY: ${NO_PROXY:-}
+    platform: linux/arm64
+    init: true
+    shm_size: 2gb
+    # cap_drop:[ALL] and no-new-privileges break Chromium's sandboxed startup
+    # (zygote sys_chroot fails); dropped so it runs WITH its sandbox.
+    security_opt:
+      - seccomp=../seccomp_profile.json
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/',{signal:AbortSignal.timeout(2000)}).then(()=>process.exit(0),()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: arm-b/orchestrator/Dockerfile
+      args: *proxy_args
+    platform: linux/arm64
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      browser:
+        condition: service_healthy
+    volumes:
+      - ../results/b:/results
+    networks:
+      default:
+        aliases:
+          - pages
+          - pages-alt
+    environment:
+      ARM: b
+      BASE_URL: http://pages:8080
+      ALT_URL: http://pages-alt:8081
+      WS_URL: ws://browser:3000/
+      RESULTS_DIR: /results
+      MODE: ${MODE:-full}
+      CHROME_SANDBOX: ${CHROME_SANDBOX:-unknown}
+      CHROMIUM_SANDBOX_ON: ${CHROMIUM_SANDBOX_ON:-0}
+      CHROMIUM_SANDBOX_OFF: ${CHROMIUM_SANDBOX_OFF:-0}
+
+networks:
+  default:

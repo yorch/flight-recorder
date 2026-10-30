@@ -1,0 +1,12 @@
+{
+  "example_com": {
+    "ok": true,
+    "status": 200,
+    "url": "https://example.com/",
+    "title": "Example Domain"
+  },
+  "example_org": {
+    "ok": false,
+    "error": "Error: page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://example.org/\nCall log:\n  - navigating to \"https://example.org/\", waiting until \"load\"\n"
+  }
+}

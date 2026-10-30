@@ -1,0 +1,64 @@
+proxy-1  | === generated /etc/squid/squid.conf ===
+proxy-1  | http_port 3128 name=browser
+proxy-1  | http_port 3129 name=agent
+proxy-1  | acl browser_port myportname browser
+proxy-1  | acl agent_port myportname agent
+proxy-1  | acl b1_host dstdomain example.com
+proxy-1  | acl b1_port port 443
+proxy-1  | http_access allow browser_port b1_host b1_port
+proxy-1  | acl g1_host dstdomain llm.test
+proxy-1  | acl g1_port port 8080
+proxy-1  | http_access allow agent_port g1_host g1_port
+proxy-1  | http_access deny all
+proxy-1  | cache deny all
+proxy-1  | via off
+proxy-1  | forwarded_for delete
+proxy-1  | logformat pair %ts.%03tu %>a %>la:%>lp %rm %ru %>Hs %Ss
+proxy-1  | access_log stdio:/var/log/squid-pair/access.log pair
+proxy-1  | cache_log stdio:/var/log/squid-pair/cache.log
+proxy-1  | debug_options ALL,1 14,3 78,3
+proxy-1  | cache_peer http.docker.internal parent 3128 0 no-query default
+proxy-1  | never_direct allow all
+internet-1  | internet up: ip=172.19.0.2 http=8080,8081 ws-upgrade udp=3478
+internet-1  | internet up: ip=172.19.0.2 http=8080,8081 ws-upgrade udp=3478
+browser-1   | 2026-10-30 14:11:02,990 INFO supervisord started with pid 7
+browser-1   | 2026-10-30 14:11:03,997 INFO spawned: 'xvfb' with pid 8
+browser-1   | 2026-10-30 14:11:03,997 INFO spawned: 'openbox' with pid 9
+browser-1   | 2026-10-30 14:11:03,998 INFO spawned: 'chrome' with pid 10
+browser-1   | Openbox-Message: Unable to find a valid menu file "/var/lib/openbox/debian-menu.xml"
+browser-1   | [10:50:1030/141104.144338:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+browser-1   | [10:50:1030/141104.144417:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:50:1030/141104.280701:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+browser-1   | [10:50:1030/141104.281092:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+browser-1   | [10:50:1030/141104.281120:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+browser-1   | [10:50:1030/141104.281125:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:50:1030/141104.281137:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:50:1030/141104.307894:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | 
+browser-1   | DevTools listening on ws://127.0.0.1:9222/devtools/browser/61564d73-a6ed-4a51-be06-95804837112d
+browser-1   | [10:50:1030/141104.346033:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:50:1030/141104.346061:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.393923:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.394061:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.394157:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.394238:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.396088:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.396176:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.414103:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.414164:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+browser-1   | [10:50:1030/141104.414181:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+browser-1   | [10:10:1030/141104.414203:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.414254:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.416331:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:10:1030/141104.449137:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.Properties.GetAll: object_path= /org/freedesktop/UPower/devices/DisplayDevice: unknown error type: 
+browser-1   | [10:10:1030/141104.449199:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.449319:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.457978:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | [10:50:1030/141104.458059:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+browser-1   | [10:10:1030/141104.469549:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+browser-1   | 2026-10-30 14:11:05,476 INFO success: xvfb entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+browser-1   | 2026-10-30 14:11:05,476 INFO success: openbox entered RUNNING state, process has stayed up for > than 1 seconds (startsecs)
+browser-1   | 2026-10-30 14:11:07,484 INFO success: chrome entered RUNNING state, process has stayed up for > than 3 seconds (startsecs)
+browser-1   | [65:82:1030/141116.173293:ERROR:services/network/p2p/socket_manager.cc:145] Failed to resolve address for evil.test., errorcode: -105
+browser-1   | [65:82:1030/141116.173710:ERROR:services/network/p2p/socket_manager.cc:145] Failed to resolve address for evil.test., errorcode: -105
+browser-1   | Fontconfig error: Cannot load default config file: File not found

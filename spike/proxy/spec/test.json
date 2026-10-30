@@ -1,0 +1,7 @@
+{
+  "name": "proxy-spike",
+  "start_url": "http://allowed.test:8080/",
+  "goal": "n/a",
+  "allowed_origins": ["http://allowed.test:8080"],
+  "allowed_hosts": ["*.cdn.test:8080"]
+}

@@ -1,0 +1,5 @@
+{"t_ms":1793369476140,"proto":"http","host_header":"allowed.test:8080","port":8080,"method":"GET","path":"/probe","remote":"172.19.0.3"}
+{"t_ms":1793369476165,"proto":"ws","host_header":"allowed.test:8080","port":8080,"method":"GET","path":"/ws?k=ws_ok","remote":"172.19.0.3"}
+{"t_ms":1793369476167,"proto":"http","host_header":"a.cdn.test:8080","port":8080,"method":"GET","path":"/img.png?k=cdn","remote":"172.19.0.3"}
+{"t_ms":1793369476174,"proto":"http","host_header":"allowed.test:8080","port":8080,"method":"GET","path":"/favicon.ico","remote":"172.19.0.3"}
+{"t_ms":1793369481237,"proto":"http","host_header":"llm.test:8080","port":8080,"method":"GET","path":"/agent?k=agent_ok","remote":"172.19.0.3"}

@@ -1,0 +1,188 @@
+{
+  "cdp_with_env_proxy": {
+    "connected": true,
+    "invariant": {
+      "screenX": 0,
+      "screenY": 0,
+      "innerWidth": 1920,
+      "innerHeight": 1080,
+      "devicePixelRatio": 1
+    }
+  },
+  "allowed_navigation": {
+    "status": 200
+  },
+  "probe": {
+    "beacon": {
+      "sent": true
+    },
+    "fetch_evil": {
+      "ok": false,
+      "error": "TypeError: Failed to fetch"
+    },
+    "post_evil": {
+      "ok": true,
+      "type": "opaque",
+      "status": 0
+    },
+    "browser_to_llm": {
+      "ok": false,
+      "error": "TypeError: Failed to fetch"
+    },
+    "agent_port_direct": {
+      "ok": false,
+      "error": "TypeError: Failed to fetch"
+    },
+    "img_evil": {
+      "ok": false
+    },
+    "img_wrongport": {
+      "ok": false
+    },
+    "ws_ok": {
+      "ok": true
+    },
+    "img_cdn": {
+      "ok": true
+    },
+    "ws_evil": {
+      "ok": false
+    },
+    "stun_dns": {
+      "ok": true,
+      "candidates": []
+    },
+    "stun_ip": {
+      "ok": true,
+      "candidates": []
+    }
+  },
+  "blocked_navigation": {
+    "threw": false,
+    "status": 403,
+    "url": "http://evil.test:8080/",
+    "text": "ERROR\nThe requested URL could not be retrieved\n\nThe following error was encountered while trying to retrieve the URL: http://evil.test:8080/\n\nAccess Denied.\n\nAccess control configuration prevents your request from being allowed at this time. Please contact your service provider if you feel this is incorrect.\n\nYour cache administrator is webmaster.\n\n\n\n\nGenerated Fri, 30 Oct 2026 14:11:21 GMT by f5f"
+  },
+  "orchestrator_fetch": {
+    "env_proxy": "1",
+    "llm": {
+      "ok": true,
+      "status": 200,
+      "ms": 16
+    },
+    "evil": {
+      "ok": true,
+      "status": 403,
+      "ms": 2
+    },
+    "allowed_via_agent_port": {
+      "ok": true,
+      "status": 403,
+      "ms": 1
+    },
+    "no_proxy_env": {
+      "ok": false,
+      "error": "TypeError: fetch failed"
+    }
+  },
+  "sandbox_still_on": "Sandbox Status\nLayer 1 Sandbox\tNamespace\nPID namespaces\tYes\nNetwork namespaces\tYes\nSeccomp-BPF sandbox\tYes\nSeccomp-BPF sandbox supports TSYNC\tYes\nPtrace Protection with Yama LSM (Broker)\tNo\nPtrace Protection with Yama LSM (Non-broker)\tNo\n\nYou are adequately sandboxed.",
+  "native_ts": true,
+  "node_version": "v26.13.0",
+  "internet_egress_ip": "172.19.0.2",
+  "direct_egress_browser": {
+    "getent_evil": {
+      "rc": 2,
+      "output": ""
+    },
+    "getent_example": {
+      "rc": 2,
+      "output": ""
+    },
+    "getent_proxy": {
+      "rc": 0,
+      "output": "172.18.0.2      proxy"
+    },
+    "tcp_internet": {
+      "rc": 0,
+      "output": "bash: connect: Network is unreachable\nbash: line 1: /dev/tcp/172.19.0.2/8080: Network is unreachable\nFAILED:1"
+    }
+  },
+  "direct_egress_orchestrator": {
+    "getent_evil": {
+      "rc": 1,
+      "output": " Container spike-proxy-orchestrator-run-c36681d2acb3 Creating \n Container spike-proxy-orchestrator-run-c36681d2acb3 Created \nError: getaddrinfo EAI_AGAIN evil.test"
+    },
+    "getent_example": {
+      "rc": 1,
+      "output": " Container spike-proxy-orchestrator-run-d5525e12ab8b Creating \n Container spike-proxy-orchestrator-run-d5525e12ab8b Created \nError: getaddrinfo EAI_AGAIN example.com"
+    },
+    "getent_proxy": {
+      "rc": 0,
+      "output": " Container spike-proxy-orchestrator-run-f9b7c6bcd2e3 Creating \n Container spike-proxy-orchestrator-run-f9b7c6bcd2e3 Created \n172.18.0.2"
+    },
+    "tcp_internet": {
+      "rc": 1,
+      "output": " Container spike-proxy-orchestrator-run-cdc9c8eeedf8 Creating \n Container spike-proxy-orchestrator-run-cdc9c8eeedf8 Created \nERR ENETUNREACH"
+    }
+  },
+  "ground_truth": {
+    "k_markers": [
+      "agent_ok",
+      "cdn",
+      "ws_ok"
+    ],
+    "udp_entries": [],
+    "host_headers": [
+      "a.cdn.test:8080",
+      "allowed.test:8080",
+      "llm.test:8080"
+    ],
+    "total_lines": 5
+  },
+  "dns_on_denied": {
+    "allowed_test_lines": [
+      "2026/10/30 14:11:16.135| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'allowed.test': Name or service not known",
+      "2026/10/30 14:11:16.136| 14,3| ipcache.cc(733) ipcache_gethostbyname: 'allowed.test', flags=0",
+      "2026/10/30 14:11:16.136| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'allowed.test': Name or service not known",
+      "2026/10/30 14:11:16.137| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'allowed.test': Name or service not known",
+      "2026/10/30 14:11:16.137| 78,3| dns_internal.cc(1800) idnsALookup: idnsALookup: buf is 30 bytes for allowed.test, id = 0x512",
+      "2026/10/30 14:11:16.137| 78,3| dns_internal.cc(1737) idnsSendSlaveAAAAQuery: buf is 30 bytes for allowed.test, id = 0x664b"
+    ],
+    "evil_test_lines": [
+      "2026/10/30 14:11:16.152| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'evil.test': Name or service not known",
+      "2026/10/30 14:11:16.154| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'evil.test': Name or service not known",
+      "2026/10/30 14:11:16.161| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'evil.test': Name or service not known",
+      "2026/10/30 14:11:16.162| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'evil.test': Name or service not known",
+      "2026/10/30 14:11:16.162| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'evil.test': Name or service not known",
+      "2026/10/30 14:11:21.199| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'evil.test': Name or service not known"
+    ],
+    "llm_test_lines": [
+      "2026/10/30 14:11:16.155| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'llm.test': Name or service not known",
+      "2026/10/30 14:11:21.234| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'llm.test': Name or service not known",
+      "2026/10/30 14:11:21.234| 14,3| ipcache.cc(733) ipcache_gethostbyname: 'llm.test', flags=0",
+      "2026/10/30 14:11:21.235| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'llm.test': Name or service not known",
+      "2026/10/30 14:11:21.236| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'llm.test': Name or service not known",
+      "2026/10/30 14:11:21.236| 78,3| dns_internal.cc(1800) idnsALookup: idnsALookup: buf is 26 bytes for llm.test, id = 0xeb38"
+    ],
+    "cdn_test_lines": [
+      "2026/10/30 14:11:16.163| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'a.cdn.test': Name or service not known",
+      "2026/10/30 14:11:16.164| 14,3| ipcache.cc(733) ipcache_gethostbyname: 'a.cdn.test', flags=0",
+      "2026/10/30 14:11:16.164| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'a.cdn.test': Name or service not known",
+      "2026/10/30 14:11:16.164| 14,3| Address.cc(409) lookupHostIP: Given Non-IP 'a.cdn.test': Name or service not known",
+      "2026/10/30 14:11:16.164| 78,3| dns_internal.cc(1800) idnsALookup: idnsALookup: buf is 28 bytes for a.cdn.test, id = 0xd672",
+      "2026/10/30 14:11:16.164| 78,3| dns_internal.cc(1737) idnsSendSlaveAAAAQuery: buf is 28 bytes for a.cdn.test, id = 0xace3"
+    ]
+  },
+  "real_internet_https": {
+    "example_com": {
+      "ok": true,
+      "status": 200,
+      "url": "https://example.com/",
+      "title": "Example Domain"
+    },
+    "example_org": {
+      "ok": false,
+      "error": "Error: page.goto: net::ERR_TUNNEL_CONNECTION_FAILED at https://example.org/\nCall log:\n  - navigating to \"https://example.org/\", waiting until \"load\"\n"
+    }
+  }
+}

@@ -1,0 +1,87 @@
+#!/bin/sh
+# Generates squid.conf from a TestSpec JSON + AGENT_EGRESS_HOSTS, then runs squid.
+set -eu
+
+CONF=${SQUID_CONF:-/etc/squid/squid.conf}
+LOGDIR=${SQUID_LOG_DIR:-/var/log/squid-pair}
+TEST_FILE=${TEST_FILE:?TEST_FILE must be set}
+mkdir -p "$LOGDIR" 2>/dev/null || true
+
+split_hostport() {
+  # $1 host[:port], $2 default port -> prints "host port"
+  case "$1" in
+    *:*) printf '%s %s\n' "${1%%:*}" "${1##*:}" ;;
+    *)   printf '%s %s\n' "$1" "$2" ;;
+  esac
+}
+
+emit_rule() {
+  # $1=prefix $2=index $3=host $4=port $5=myportname
+  h=$3
+  case "$h" in
+    \*.*) h=".${h#*.}" ;;   # *.cdn.test -> .cdn.test
+  esac
+  printf 'acl %s%s_host dstdomain %s\n' "$1" "$2" "$h"
+  printf 'acl %s%s_port port %s\n' "$1" "$2" "$4"
+  printf 'http_access allow %s %s%s_host %s%s_port\n' "$5" "$1" "$2" "$1" "$2"
+}
+
+{
+cat <<'EOF'
+http_port 3128 name=browser
+http_port 3129 name=agent
+acl browser_port myportname browser
+acl agent_port myportname agent
+EOF
+
+# allowed_origins: full URLs -> dstdomain + port (scheme default when absent)
+jq -r '.allowed_origins[]? // empty' "$TEST_FILE" \
+| { i=0; while IFS= read -r url; do
+      i=$((i+1))
+      scheme=${url%%://*}
+      rest=${url#*://}
+      hp=${rest%%/*}
+      case "$scheme" in https) def=443 ;; *) def=80 ;; esac
+      set -- $(split_hostport "$hp" "$def")
+      emit_rule b "$i" "$1" "$2" browser_port
+    done; }
+
+# allowed_hosts: "host[:port]" entries, *.-wildcards, port defaults to 443
+jq -r '.allowed_hosts[]? // empty' "$TEST_FILE" \
+| { i=100; while IFS= read -r hp; do
+      i=$((i+1))
+      set -- $(split_hostport "$hp" 443)
+      emit_rule b "$i" "$1" "$2" browser_port
+    done; }
+
+# agent egress hosts: "host[:port]", default 443
+printf '%s\n' "${AGENT_EGRESS_HOSTS:-}" | tr ',' '\n' \
+| { i=0; while IFS= read -r hp; do
+      [ -z "$hp" ] && continue
+      i=$((i+1))
+      set -- $(split_hostport "$hp" 443)
+      emit_rule g "$i" "$1" "$2" agent_port
+    done; }
+
+cat <<EOF
+http_access deny all
+cache deny all
+via off
+forwarded_for delete
+logformat pair %ts.%03tu %>a %>la:%>lp %rm %ru %>Hs %Ss
+access_log stdio:$LOGDIR/access.log pair
+cache_log stdio:$LOGDIR/cache.log
+debug_options ALL,1 14,3 78,3
+EOF
+
+if [ -n "${UPSTREAM_PROXY:-}" ]; then
+  set -- $(split_hostport "$UPSTREAM_PROXY" 3128)
+  printf 'cache_peer %s parent %s 0 no-query default\n' "$1" "$2"
+  printf 'never_direct allow all\n'
+fi
+} > "$CONF"
+
+echo "=== generated $CONF ===" >&2
+cat "$CONF" >&2
+
+exec squid -N -f "$CONF"

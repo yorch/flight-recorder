@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+PROFILE=/tmp/chrome-profile
+rm -rf "$PROFILE" && mkdir -p "$PROFILE"
+
+EXTRA=""
+if [ "${CHROME_NO_SANDBOX:-0}" = "1" ]; then
+  EXTRA="$EXTRA --no-sandbox --test-type"
+fi
+if [ -n "${CHROME_EXTRA_ARGS:-}" ]; then
+  EXTRA="$EXTRA $CHROME_EXTRA_ARGS"
+fi
+if [ "${CHROME_DISABLE_GPU:-1}" = "1" ]; then
+  EXTRA="$EXTRA --disable-gpu"
+fi
+
+# shellcheck disable=SC2086
+exec google-chrome-stable \
+  --user-data-dir="$PROFILE" \
+  --remote-debugging-port=9222 \
+  --kiosk \
+  --window-position=0,0 \
+  --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
+  --force-device-scale-factor=1 \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-search-engine-choice-screen \
+  --disable-features=Translate,MediaRouter \
+  --disable-background-networking \
+  --disable-component-update \
+  --disable-sync \
+  --password-store=basic \
+  $EXTRA \
+  about:blank

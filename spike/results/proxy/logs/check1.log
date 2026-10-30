@@ -1,0 +1,18 @@
+
+
+172.18.0.2      proxy
+bash: connect: Network is unreachable
+bash: line 1: /dev/tcp/172.19.0.2/8080: Network is unreachable
+FAILED:1
+ Container spike-proxy-orchestrator-run-c36681d2acb3 Creating 
+ Container spike-proxy-orchestrator-run-c36681d2acb3 Created 
+Error: getaddrinfo EAI_AGAIN evil.test
+ Container spike-proxy-orchestrator-run-d5525e12ab8b Creating 
+ Container spike-proxy-orchestrator-run-d5525e12ab8b Created 
+Error: getaddrinfo EAI_AGAIN example.com
+ Container spike-proxy-orchestrator-run-f9b7c6bcd2e3 Creating 
+ Container spike-proxy-orchestrator-run-f9b7c6bcd2e3 Created 
+172.18.0.2
+ Container spike-proxy-orchestrator-run-cdc9c8eeedf8 Creating 
+ Container spike-proxy-orchestrator-run-cdc9c8eeedf8 Created 
+ERR ENETUNREACH

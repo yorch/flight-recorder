@@ -1,0 +1,32 @@
+[x11grab @ 0xaaaac7138da0] Stream #0: not enough frames to estimate rate; consider increasing probesize
+Input #0, x11grab, from ':99.0':
+  Duration: N/A, start: 1793298532.697426, bitrate: 1990656 kb/s
+  Stream #0:0: Video: rawvideo (BGR[0] / 0x524742), bgr0, 1920x1080, 1990656 kb/s, 30 fps, 1000k tbr, 1000k tbn
+Stream mapping:
+  Stream #0:0 -> #0:0 (rawvideo (native) -> h264 (libx264))
+Press [q] to stop, [?] for help
+[libx264 @ 0xaaaac713f570] using cpu capabilities: ARMv8 NEON
+[libx264 @ 0xaaaac713f570] profile Constrained Baseline, level 4.0, 4:2:0, 8-bit
+[libx264 @ 0xaaaac713f570] 264 - core 164 r3108 31e19f9 - H.264/MPEG-4 AVC codec - Copyleft 2003-2023 - http://www.videolan.org/x264.html - options: cabac=0 ref=1 deblock=0:0:0 analyse=0:0 me=dia subme=0 psy=1 psy_rd=1.00:0.00 mixed_ref=0 me_range=16 chroma_me=1 trellis=0 8x8dct=0 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=0 threads=18 lookahead_threads=3 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=0 weightp=0 keyint=30 keyint_min=3 scenecut=0 intra_refresh=0 rc=crf mbtree=0 crf=18.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=0
+Output #0, matroska, to '/results/video.mkv':
+  Metadata:
+    encoder         : Lavf61.7.103
+  Stream #0:0: Video: h264 (H264 / 0x34363248), yuv420p(tv, progressive), 1920x1080, q=2-31, 30 fps, 1k tbn
+      Metadata:
+        encoder         : Lavc61.19.101 libx264
+      Side data:
+        cpb: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+
+
+[q] command received. Exiting.
+
+[out#0/matroska @ 0xaaaac71409d0] video:6370KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.101926%
+frame=  811 fps= 30 q=-1.0 Lsize=    6377KiB time=00:00:27.13 bitrate=1925.3kbits/s dup=0 drop=3 speed=   1x    
+[libx264 @ 0xaaaac713f570] frame I:28    Avg QP: 5.96  size:142328
+[libx264 @ 0xaaaac713f570] frame P:783   Avg QP: 8.88  size:  3241
+[libx264 @ 0xaaaac713f570] mb I  I16..4: 100.0%  0.0%  0.0%
+[libx264 @ 0xaaaac713f570] mb P  I16..4:  2.8%  0.0%  0.0%  P16..4:  1.0%  0.0%  0.0%  0.0%  0.0%    skip:96.2%
+[libx264 @ 0xaaaac713f570] coded y,uvDC,uvAC intra: 4.8% 5.2% 5.1% inter: 0.5% 0.7% 0.7%
+[libx264 @ 0xaaaac713f570] i16 v,h,dc,p: 95%  4%  1%  0%
+[libx264 @ 0xaaaac713f570] i8c dc,h,v,p: 96%  1%  3%  0%
+[libx264 @ 0xaaaac713f570] kb/s:1920.82

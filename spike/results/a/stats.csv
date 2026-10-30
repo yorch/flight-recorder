@@ -1,0 +1,21 @@
+epoch_s,container,cpu_perc,mem_usage
+1793298533.145,spike-a-orchestrator-1,45.05%,353.5MiB / 7.748GiB
+1793298533.145,spike-a-browser-1,3.61%,263.8MiB / 7.748GiB
+1793298535.223,spike-a-orchestrator-1,45.02%,353.5MiB / 7.748GiB
+1793298535.223,spike-a-browser-1,5.55%,262.7MiB / 7.748GiB
+1793298538.306,spike-a-orchestrator-1,38.92%,353.5MiB / 7.748GiB
+1793298538.306,spike-a-browser-1,28.98%,271.8MiB / 7.748GiB
+1793298541.375,spike-a-orchestrator-1,43.34%,355.5MiB / 7.748GiB
+1793298541.375,spike-a-browser-1,30.56%,273.9MiB / 7.748GiB
+1793298544.453,spike-a-orchestrator-1,33.92%,355.8MiB / 7.748GiB
+1793298544.453,spike-a-browser-1,3.17%,273.7MiB / 7.748GiB
+1793298547.560,spike-a-orchestrator-1,42.80%,355.9MiB / 7.748GiB
+1793298547.560,spike-a-browser-1,3.76%,264.1MiB / 7.748GiB
+1793298549.627,spike-a-orchestrator-1,41.71%,355.8MiB / 7.748GiB
+1793298549.627,spike-a-browser-1,12.78%,264.8MiB / 7.748GiB
+1793298552.708,spike-a-orchestrator-1,132.44%,357.5MiB / 7.748GiB
+1793298552.708,spike-a-browser-1,44.36%,279.8MiB / 7.748GiB
+1793298554.960,spike-a-orchestrator-1,41.73%,372.2MiB / 7.748GiB
+1793298554.960,spike-a-browser-1,12.63%,301.5MiB / 7.748GiB
+1793298557.019,spike-a-orchestrator-1,42.44%,376.5MiB / 7.748GiB
+1793298557.019,spike-a-browser-1,20.97%,298.7MiB / 7.748GiB
