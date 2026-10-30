@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+PROFILE=/tmp/chrome-profile
+rm -rf "$PROFILE" && mkdir -p "$PROFILE"
+
+if [ "${CHROME_WEBGL:-0}" = "1" ]; then
+  GPU="--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --disable-gpu-sandbox"
+else
+  GPU="--disable-gpu"
+fi
+
+# shellcheck disable=SC2086
+exec google-chrome-stable \
+  --user-data-dir="$PROFILE" \
+  --remote-debugging-port=9222 \
+  --kiosk \
+  --window-position=0,0 \
+  --window-size="${SCREEN_WIDTH},${SCREEN_HEIGHT}" \
+  --force-device-scale-factor=1 \
+  --lang="${CHROME_LANG}" \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-search-engine-choice-screen \
+  --disable-features=Translate,MediaRouter \
+  --disable-background-networking \
+  --disable-component-update \
+  --disable-sync \
+  --password-store=basic \
+  --proxy-server=http://proxy:3128 \
+  $GPU \
+  about:blank

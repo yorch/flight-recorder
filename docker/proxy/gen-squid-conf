@@ -1,0 +1,64 @@
+#!/bin/sh
+# Generates squid.conf from the TestSpec and AGENT_EGRESS_HOSTS, then runs Squid in the foreground.
+set -eu
+: "${TEST_FILE:?TEST_FILE must be set}" "${AGENT_EGRESS_HOSTS:?AGENT_EGRESS_HOSTS must be set}"
+CONF=/etc/squid/squid.conf
+LOG=/var/log/squid-pair
+
+# One host:port per line. Origins get their scheme's default port; allowed_hosts and agent hosts default to 443.
+jq -r '
+  (.allowed_origins[] | . as $o
+     | (capture("^(?<s>https?)://(?<h>[^/:]+)(:(?<p>[0-9]+))?/?$") // error("invalid origin: " + $o))
+     | "\(.h):\(.p // (if .s == "https" then "443" else "80" end))"),
+  ((.allowed_hosts // [])[]
+     | if test("^(\\*\\.)?[A-Za-z0-9.-]+(:[0-9]{1,5})?$") then . else error("invalid allowed_hosts entry: " + .) end
+     | if test(":") then . else . + ":443" end)
+' "$TEST_FILE" > /tmp/browser-hosts
+printf '%s\n' "$AGENT_EGRESS_HOSTS" | tr ',' '\n' | sed '/^$/d; /:/!s/$/:443/' > /tmp/agent-hosts
+
+rules() { # $1 = acl prefix, $2 = listening-port acl, $3 = file of host:port lines
+  i=0
+  while IFS= read -r hp; do
+    host=${hp%:*}
+    port=${hp##*:}
+    printf '%s' "$host" | grep -Eq '^(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$' || { echo "gen-squid-conf: invalid host in '$hp'" >&2; exit 1; }
+    printf '%s' "$port" | grep -Eq '^[0-9]{1,5}$' || { echo "gen-squid-conf: invalid port in '$hp'" >&2; exit 1; }
+    case "$host" in '*.'*) host=".${host#??}" ;; esac
+    i=$((i + 1))
+    printf 'acl %s%d_host dstdomain %s\nacl %s%d_port port %s\nhttp_access allow %s %s%d_host %s%d_port\n' \
+      "$1" "$i" "$host" "$1" "$i" "$port" "$2" "$1" "$i" "$1" "$i"
+  done < "$3"
+}
+
+{
+  printf 'http_port 3128 name=browser\nhttp_port 3129 name=agent\n'
+  printf 'acl browser_port myportname browser\nacl agent_port myportname agent\n'
+  rules b browser_port /tmp/browser-hosts
+  rules g agent_port /tmp/agent-hosts
+  cat <<EOF
+http_access deny all
+cache deny all
+pinger_enable off
+via off
+forwarded_for delete
+umask 022
+logformat pair %ts.%03tu %>a %>la:%>lp %rm %ru %>Hs %Ss
+access_log stdio:$LOG/access.log pair
+cache_log stdio:$LOG/cache.log
+EOF
+  if [ -n "${UPSTREAM_PROXY:-}" ]; then
+    printf 'cache_peer %s parent %s 0 no-query default\n' "${UPSTREAM_PROXY%:*}" "${UPSTREAM_PROXY##*:}"
+    if [ -n "${UPSTREAM_BYPASS:-}" ]; then
+      bypass=""
+      for h in $(printf '%s' "$UPSTREAM_BYPASS" | tr ',' ' '); do
+        printf '%s' "$h" | grep -Eq '^(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$' || { echo "gen-squid-conf: invalid UPSTREAM_BYPASS entry: '$h'" >&2; exit 1; }
+        case "$h" in '*.'*) h=".${h#??}" ;; esac
+        bypass="$bypass $h"
+      done
+      printf 'acl upstream_bypass dstdomain %s\nalways_direct allow upstream_bypass\n' "${bypass# }"
+    fi
+    printf 'never_direct allow all\n'
+  fi
+} > "$CONF"
+
+exec squid -N -f "$CONF"

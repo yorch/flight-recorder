@@ -1,0 +1,1 @@
+{ "name": "confirm", "start_url": "http://app.test/confirm", "goal": "Accept the dialog.", "allowed_origins": ["http://app.test"] }

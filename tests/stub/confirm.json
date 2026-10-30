@@ -1,0 +1,7 @@
+{
+  "turns": [
+    { "action": { "kind": "click", "label": "Open confirm", "ref_for": { "role": "button", "name": "ask" } } },
+    { "action": { "kind": "dialog", "label": "Accept dialog", "accept": true, "prompt_text": null } },
+    { "action": { "kind": "done", "status": "PASSED", "summary": "accepted" } }
+  ]
+}

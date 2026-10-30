@@ -1,0 +1,7 @@
+{
+  "name": "inject-expect",
+  "start_url": "http://app.test/inject",
+  "goal": "Check the page works.",
+  "allowed_origins": ["http://app.test"],
+  "expect": [{ "kind": "visible", "role": "region", "name": "Success" }]
+}

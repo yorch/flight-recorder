@@ -369,12 +369,23 @@ cache deny all
 pinger_enable off
 via off
 forwarded_for delete
+umask 022
 logformat pair %ts.%03tu %>a %>la:%>lp %rm %ru %>Hs %Ss
 access_log stdio:$LOG/access.log pair
 cache_log stdio:$LOG/cache.log
 EOF
   if [ -n "${UPSTREAM_PROXY:-}" ]; then
-    printf 'cache_peer %s parent %s 0 no-query default\nnever_direct allow all\n' "${UPSTREAM_PROXY%:*}" "${UPSTREAM_PROXY##*:}"
+    printf 'cache_peer %s parent %s 0 no-query default\n' "${UPSTREAM_PROXY%:*}" "${UPSTREAM_PROXY##*:}"
+    if [ -n "${UPSTREAM_BYPASS:-}" ]; then
+      bypass=""
+      for h in $(printf '%s' "$UPSTREAM_BYPASS" | tr ',' ' '); do
+        printf '%s' "$h" | grep -Eq '^(\*\.)?[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$' || { echo "gen-squid-conf: invalid UPSTREAM_BYPASS entry: '$h'" >&2; exit 1; }
+        case "$h" in '*.'*) h=".${h#??}" ;; esac
+        bypass="$bypass $h"
+      done
+      printf 'acl upstream_bypass dstdomain %s\nalways_direct allow upstream_bypass\n' "${bypass# }"
+    fi
+    printf 'never_direct allow all\n'
   fi
 } > "$CONF"
 
@@ -389,8 +400,8 @@ Rules and properties (all verified in the proxy spike, §13.2):
 - **HTTPS stays end-to-end encrypted.** HTTPS and WebSocket traffic is filtered on the `CONNECT host:port` line, without TLS interception.
 - **No DNS for denied hosts.** Squid resolves only allowed hosts. The run pair itself has no DNS beyond container names, because Docker's embedded resolver does not forward queries from `internal` networks.
 - **WebRTC/UDP has nowhere to go.** The `sandbox` network has no route out, so ICE gathering produced no candidates and no datagrams left the network.
-- **Corporate proxies.** `UPSTREAM_PROXY=host:port` chains through a parent proxy (`cache_peer` + `never_direct`).
-- **Logging.** One line per request (`<epoch> <client> <listen addr:port> <method> <url> <status> <squid result>`), written to the `proxy-logs` volume. The orchestrator collects it after the run (§6.6).
+- **Corporate proxies.** `UPSTREAM_PROXY=host:port` chains every allowed request through a parent proxy (`cache_peer` + `never_direct`). `UPSTREAM_BYPASS` is a comma-separated list of hostnames that always go direct, such as internal test sites the parent can't reach. It is validated like the other entries. Verified: with a parent set, fixture hosts logged `HIER_DIRECT` and the model API call logged `FIRSTUP_PARENT`.
+- **Logging.** One line per request (`<epoch> <client> <listen addr:port> <method> <url> <status> <squid result>`), written to the `proxy-logs` volume. The orchestrator collects it after the run (§6.6). `umask 022` is required: Squid's default `027` makes the log unreadable to the orchestrator's `node` user (found during the build).
 
 ### 2.5 Composition (`docker-compose.yml`)
 
@@ -416,6 +427,7 @@ services:
       TEST_FILE: ${TEST_FILE:?TEST_FILE must be set}
       AGENT_EGRESS_HOSTS: ${AGENT_EGRESS_HOSTS:?AGENT_EGRESS_HOSTS must be set} # model API host[:port], comma-separated
       UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}                                    # optional parent proxy host:port
+      UPSTREAM_BYPASS: ${UPSTREAM_BYPASS:-}                                  # hostnames that skip the parent proxy
 
   browser:
     build: ./docker/browser
@@ -484,7 +496,7 @@ Notes:
 
 - No `ports:` anywhere. To inspect CDP during development, use `docker compose exec browser curl ...` (§10).
 - No `container_name`: the compose project name (`-p run-<id>`) isolates concurrent runs, including the `x11` volume.
-- **Secrets** (`AGENT_API_KEY` and test credentials) are files in `./secrets/`, mounted read-only. They never appear as environment variables, so they don't show up in `docker inspect` or `docker compose config`.
+- **Secrets** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and test credentials) are files in `./secrets/`, mounted read-only. They never appear as environment variables, so they don't show up in `docker inspect` or `docker compose config`.
 - On Linux hosts, `./artifacts` must be writable by UID 1000 (`node`), and `./secrets` must be readable by it.
 - **Proxy at startup.** `depends_on: service_started` only orders container startup; it doesn't wait for Squid to listen. That is enough, because nothing needs egress before the orchestrator's first navigation. If the proxy exits at startup (for example, on an invalid TestSpec), that navigation fails and the run ends with a harness error.
 - **Model SDKs.** The model provider client must use Node's built-in `fetch` or `http(s)`. Clients that bring their own HTTP stack must be configured with the proxy explicitly. Otherwise they fail closed, because the sandbox network has no route out.
@@ -689,6 +701,7 @@ export class ScreenRecorder {
       '-hide_banner', '-nostats', '-loglevel', 'info',
       '-f', 'x11grab', '-framerate', String(fps), '-video_size', `${width}x${height}`, '-draw_mouse', '1', '-i', `${display}.0`,
       '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '18', '-g', String(fps), '-pix_fmt', 'yuv420p',
+      '-flush_packets', '1', // a SIGKILLed recorder otherwise loses ffmpeg's ~32 KB output buffer (0-byte file)
       outFile,
     ], { stdio: ['pipe', 'ignore', 'pipe'] });
     this.proc = proc;
@@ -1150,9 +1163,34 @@ The agent's own claim is never enough to pass a run, because page content can st
 4. `ScreenRecorder.start()`, then emit `RECORDING_START` with `video_start_ms`. Recording starts before the first step.
 5. Execute the harness's own `navigate` step to `start_url` as step `s0000` (no thinking phase), then `runAgent()`, whose steps start at `s0001`. Unexpected harness errors become `FAILED` with summary `Harness error: …`.
 6. Compute the run verdict (§6.4) from the agent outcome and `spec.expect`.
-7. In `finally`: emit `RUN_END` with the verdict, `ScreenRecorder.stop()`, emit `RECORDING_STOP`, and close the log. Copy `/proxy-logs/access.log` to `logs/proxy-access.log`, and write `run.json`, including an `egress` summary: `{ allowed: <count>, denied: [{ "host": "host:port", "count": n }] }`, grouped from the proxy's `TCP_DENIED*` lines. Denied requests are reported, not failed: Chrome's own background requests (for example, `www.google.com:443`) appear there routinely. A denied main-frame navigation already fails the run through `session.violation`.
+7. In `finally`: emit `RUN_END` with the verdict, `ScreenRecorder.stop()`, emit `RECORDING_STOP`, and close the log. Copy `/proxy-logs/access.log` to `logs/proxy-access.log` (if it's missing, `egress` is `null` and a warning goes to `logs/harness.log`; any other read error is a harness error), and write `run.json`, including an `egress` summary: `{ allowed: <count>, denied: [{ "host": "host:port", "count": n }] }`, grouped from the proxy's `TCP_DENIED*` lines. Denied requests are reported, not failed: Chrome's own background requests (for example, `www.google.com:443`) appear there routinely. A denied main-frame navigation already fails the run through `session.violation`.
 8. Run post-processing (§7).
 9. Exit code: `0` passed, `1` test failed, `2` harness or post-processing error, `3` unverified.
+
+### 6.7 Model Providers (`src/agent/providers/`)
+
+`AGENT_MODEL` selects the client: `anthropic/<model-id>`, `openai/<model-id>`, or `stub/<path-to-script.json>`. Both real clients use Node's built-in `fetch`, so model traffic goes through proxy port 3129 (§2.4), and they read their keys from `/run/secrets/ANTHROPIC_API_KEY` or `/run/secrets/OPENAI_API_KEY`.
+
+**Common behaviour:**
+
+- **Wire schema:** the loop passes a wire schema derived from `AgentTurn`: `toWireSchema(z.toJSONSchema(AgentTurn))`. It turns `oneOf` into `anyOf`, strips the numeric/length/pattern/format constraints neither provider accepts in strict mode, and makes every object `additionalProperties: false` with all keys `required`. Optional fields are therefore nullable instead of omitted. zod still validates every reply in full.
+- **Enum casing:** providers don't guarantee the casing of enum values, so replies go through `normalizeEnums()` (case-insensitive mapping onto the known literal sets) before validation.
+- **Retries:** `postJson()` retries network errors and 408/409/429/5xx/529 up to 4 attempts, with exponential backoff and jitter, honouring `retry-after`. Each attempt has a 120 s timeout.
+- **Prompt:** one system prompt shared by both providers (`src/agent/prompt.ts`) implements the requirements in §6.2.
+
+| | Anthropic | OpenAI |
+|---|---|---|
+| Endpoint | `POST /v1/messages` (`anthropic-version: 2023-06-01`) | `POST /v1/responses` |
+| Structured output | `output_config.format` (`json_schema`) | `text.format` (`json_schema`, `strict: true`) |
+| Screenshot | base64 PNG block before the text (sized exactly to `imageSize`, so the API never resizes it; the API rejects an `oversized_image` field) | `input_image` data URL, `detail: "original"` |
+| `imageSize` | Anthropic's reference `resizedSize()` algorithm. Standard tier 1568 px / 1568 tokens; high tier 2576 px / 4784 tokens for Claude 4.7 and later (override with `AGENT_IMAGE_TIER`). 1920×1080 becomes 1456×819 on the standard tier and is unchanged on the high tier. | Conservative `original`-detail limits: at most 6000 px per side and 10,000 patches of 32×32. 1920×1080 is unchanged. |
+| Refusal | `stop_reason: "refusal"` → `done/FAILED` | `refusal` content → `done/FAILED` |
+
+**Stub:** `stub/<script.json>` returns scripted turns in order (each with an optional `sleep_ms`) for tests. It supports three stub-only conveniences, all ignored for real providers:
+
+- `ref_for: {role, name}` resolves a ref from the current snapshot.
+- `point_from_screen` converts a screen point into the image space of a chosen client's sizing rules.
+- `image_size_from` selects that sizing (`anthropic:standard`, `anthropic:high`, `openai` or `screen`).
 
 ## 7. Post-Processing Pipeline
 
@@ -1174,23 +1212,16 @@ Post-processing is a pure function of `events.jsonl` and `raw.mkv`. It can be re
 | `ZOOM_CONTEXT` | 3 | The target box fills roughly 1/3 of the frame when zoomed |
 | `ZOOM_MERGE_GAP` | 1.0 s | Zoom windows closer than this merge into one |
 | `DEFAULT_TARGET` | 480×270 | Box assumed around coordinate-mode points (`click_at`, `scroll`) |
-| `FREEZE_NOISE` | -60 dB | `freezedetect` noise tolerance |
-| `FREEZE_MIN` | 2.0 s | A static screen lasting longer than this is compressed even inside an action |
-| `FREEZE_KEEP` | 0.5 s | Real-time video kept at each edge of a compressed freeze |
+| `ACTIVE_MAX` | 4.0 s | Actions (`ACTION_START`→`ACTION_END`) longer than this get their middle compressed |
+| `ACTIVE_KEEP` | 1.5 s | Real-time video kept at the start and end of a long action |
 
 In the code below, `PARAMS` is an object holding these defaults.
 
 ### 7.2 Time Map (`src/postprocess/timemap.ts`)
 
-**Active** time is every `[ACTION_START − PRE_PAD, ACTION_END + POST_PAD]` window, so page loads within an action play in real time. There is one exception: any span where the screen doesn't change for longer than `FREEZE_MIN` (for example, a slow `goto` or an assertion waiting for its timeout) is cut out of the active windows, except for `FREEZE_KEEP` at each edge. Everything else (agent thinking, observation capture, cut freezes) is **idle**. Idle gaps shorter than `MIN_IDLE` play at 1×. Longer gaps are sped up by `max(IDLE_SPEED, gap / IDLE_MAX_OUT)`.
+**Active** time is every `[ACTION_START − PRE_PAD, ACTION_END + POST_PAD]` window, so page loads within an action play in real time. There is one exception: an action lasting longer than `ACTIVE_MAX` (for example, a slow `goto` or an assertion waiting out its timeout) keeps only `ACTIVE_KEEP` of real time at each end, and its middle is compressed. Everything else (agent thinking, observation capture, the middles of long actions) is **idle**. Idle gaps shorter than `MIN_IDLE` play at 1×. Longer gaps are sped up by `max(IDLE_SPEED, gap / IDLE_MAX_OUT)`.
 
-Freezes are detected from the raw video:
-
-```text
-ffmpeg -hide_banner -i raw.mkv -vf freezedetect=n=-60dB:d=2 -an -f null -
-```
-
-The command prints `lavfi.freezedetect.freeze_start: <s>` / `freeze_end: <s>` pairs on stderr. A trailing start with no end runs to the end of the video. The pairs are saved as `freeze.json`.
+The long-action rule is based on events, not pixels. Pixel-based freeze detection was tried first (ffmpeg `freezedetect`) and rejected. Typing and cursor movement change too few pixels to register against a frame-wide noise threshold, so whole runs were classified as frozen. A blinking text caret, meanwhile, keeps any pixel-based detector from ever seeing a freeze.
 
 ```typescript
 export interface Segment { inStart: number; inEnd: number; outStart: number; speed: number } // seconds
@@ -1203,12 +1234,17 @@ function subtract(spans: Span[], cuts: Span[]): Span[] {
     ce <= s || cs >= e ? [[s, e]] : ([[s, Math.max(s, cs)], [Math.min(e, ce), e]] as Span[]).filter(([a, b]) => b > a)), spans);
 }
 
-export function buildTimeMap(events: TimelineEvent[], rel: (ms: number) => number, duration: number, freezes: Span[], p = PARAMS): Segment[] {
+export function buildTimeMap(events: TimelineEvent[], rel: (ms: number) => number, duration: number, p = PARAMS): Segment[] {
   const starts = new Map<string, number>();
   const active: Span[] = [];
+  const cuts: Span[] = [];
   for (const ev of events) {
     if (ev.type === 'ACTION_START') starts.set(ev.step_id, rel(ev.t_ms));
-    if (ev.type === 'ACTION_END' && starts.has(ev.step_id)) active.push([starts.get(ev.step_id)! - p.PRE_PAD, rel(ev.t_ms) + p.POST_PAD]);
+    const s = ev.type === 'ACTION_END' ? starts.get(ev.step_id) : undefined;
+    if (ev.type !== 'ACTION_END' || s === undefined) continue;
+    const e = rel(ev.t_ms);
+    active.push([s - p.PRE_PAD, e + p.POST_PAD]);
+    if (e - s > p.ACTIVE_MAX) cuts.push([s + p.ACTIVE_KEEP, e - p.ACTIVE_KEEP]);
   }
 
   const merged: Span[] = [];
@@ -1219,7 +1255,6 @@ export function buildTimeMap(events: TimelineEvent[], rel: (ms: number) => numbe
     if (last && a <= last[1]) last[1] = Math.max(last[1], b);
     else merged.push([a, b]);
   }
-  const cuts = freezes.filter(([s, e]) => e - s > p.FREEZE_MIN).map(([s, e]): Span => [s + p.FREEZE_KEEP, e - p.FREEZE_KEEP]);
   const kept = subtract(merged, cuts);
 
   const segments: Segment[] = [];
@@ -1399,7 +1434,6 @@ artifacts/<run_id>/
   chapters.json             # §8
   chapters.vtt              # §8
   timemap.json              # segments from §7.2 (raw -> final time mapping)
-  freeze.json               # static-screen spans from freezedetect (§7.2)
   filter.txt                # ffmpeg filter graph used for final.mp4
   screenshots/<step_id>.png # observation sent to the model
   agent/transcript.jsonl    # §6.3
@@ -1437,12 +1471,27 @@ Compose interpolates variables for every service, so the placeholder values are 
 
 ### Run a Test
 
-Put one file per secret in `./secrets/` (gitignored): `AGENT_API_KEY` plus every name listed in the TestSpec's `secrets`. Then:
+Put one file per secret in `./secrets/` (gitignored): the provider key (`ANTHROPIC_API_KEY` or `OPENAI_API_KEY`) plus every name listed in the TestSpec's `secrets`. Then:
 
 ```bash
-export RUN_ID="$(date +%Y%m%d-%H%M%S)" AGENT_MODEL=<model-id> AGENT_EGRESS_HOSTS=<model-api-host>
-# Behind a corporate proxy, also: export UPSTREAM_PROXY=<host:port>
-TEST_FILE=/tests/login.json docker compose -p "run-$RUN_ID" up --build --exit-code-from orchestrator
+# Behind a corporate proxy (or Docker Desktop's egress forwarder), also: export UPSTREAM_PROXY=<host:port>
+scripts/run-test.sh specs/login.json anthropic/<model-id>
+```
+
+`scripts/run-test.sh <spec relative to tests/> <provider/model>` does the following:
+
+- generates `RUN_ID`;
+- derives `AGENT_EGRESS_HOSTS` from the provider (`api.anthropic.com`, `api.openai.com`, or a dummy for `stub`);
+- adds any `COMPOSE_OVERLAYS` (for example, the acceptance fixtures);
+- runs `docker compose -p run-$RUN_ID up --build -d`, then `docker wait`s on the orchestrator container. `--exit-code-from` would imply `--abort-on-container-exit`, so a proxy that exits early (an invalid TestSpec) would stop the browser mid-start and leave the orchestrator hanging in `Created`;
+- always tears down with `down -v`;
+- exits with the run's exit code.
+
+The equivalent manual steps are:
+
+```bash
+export RUN_ID="$(date +%Y%m%d-%H%M%S)" AGENT_MODEL=anthropic/<model-id> AGENT_EGRESS_HOSTS=api.anthropic.com
+TEST_FILE=/tests/specs/login.json docker compose -p "run-$RUN_ID" up --build --exit-code-from orchestrator
 docker compose -p "run-$RUN_ID" down -v
 ```
 
@@ -1463,9 +1512,13 @@ One run pair per test run, isolated by project name. In the spike, a pair used a
 2. No host ports are published, and `curl localhost:9222` from the host fails.
 3. **Sandbox:** `chrome://sandbox` in the running browser reports "You are adequately sandboxed", and `start-chrome` contains no `--no-sandbox`.
 4. The coordinate invariant (§3) passes on startup. A deliberately broken configuration (for example, without `--kiosk`) aborts with exit code 2.
-5. **Sync:** in a calibration page where a click toggles the page between red and white, the first changed frame in `raw.mkv`, mapped through §4.1, lands 0–50 ms after the page-side click timestamp for every click. The spike measured 10–42 ms; `spike/analyze.py` is the reference measurement.
+5. **Sync:** on a calibration page where a click toggles the page between red and white, measure 10 clicks. For each, the delay is the first changed frame in `raw.mkv` (real frame `pts`, mapped through §4.1) minus the page-side click timestamp.
+   - Every delay must be ≥ 0. A negative delay would mean the anchor is wrong.
+   - The minimum delay must be ≤ 50 ms. True paint latency is ≥ 0, so the minimum bounds the systematic anchor error, which is what chapter and zoom alignment depend on.
+   - The maximum delay must be ≤ 100 ms (3 frames at 30 fps). This bounds the click-to-paint-to-capture latency a viewer sees, including under host load.
+   - The measurement method is the one in `spike/analyze.py`. Measured during the build: minimum 4–42 ms, maximum 47–80 ms depending on host load. An earlier 0–50 ms bound on every click conflated anchor error with paint latency and failed on a loaded host.
 6. **Recording integrity:** `raw.mkv` is playable, and post-processing succeeds, both after a normal stop and after the orchestrator is `SIGKILL`ed mid-run (duration fallback, §7.4).
-7. **Compression:** with a stub model that sleeps 10 s per turn, every idle gap in `final.mp4` lasts at most `IDLE_MAX_OUT`, and all action windows play at 1× except freezes longer than `FREEZE_MIN`.
+7. **Compression:** with a stub model that sleeps 10 s per turn, every idle gap in `final.mp4` lasts at most `IDLE_MAX_OUT`, and all action windows play at 1×, except that the middle of any action longer than `ACTIVE_MAX` is compressed so that action contributes at most `2 × ACTIVE_KEEP + IDLE_MAX_OUT` of output.
 8. **Chapters:** the chapter count equals the number of executed actions; each chapter's start lands within one frame of the mapped step start; `chapters.vtt` loads in Chrome through `<track kind="chapters">`.
 9. **Failures:** a failing action produces `ACTION_END` with `FAILED` and a `FAILED` chapter; an assertion failure ends the run with exit code 1.
 10. **Verdict integrity:** a test page whose text tells the agent to report success, with a stub model that obeys it (`done: PASSED`, `assert_visual: PASSED`), ends `FAILED` when `spec.expect` fails and `UNVERIFIED` (exit 3) when `spec.expect` is absent.
@@ -1486,6 +1539,7 @@ One run pair per test run, isolated by project name. In the spike, a pair used a
 18. **No bypass routes:** from both run-pair containers, DNS for external names fails and a direct TCP connect to an external IP fails with "network unreachable". Node `fetch` without `NODE_USE_ENV_PROXY` fails.
 19. **Proxy config validation:** a TestSpec whose `allowed_origins` or `allowed_hosts` contains an invalid entry, including one with an embedded newline that tries to inject `http_access allow all`, stops the proxy before Squid starts, and the run fails.
 20. **Egress report:** `run.json.egress.denied` lists every host:port the proxy denied, with counts, and `logs/proxy-access.log` is present.
+21. **Upstream chaining:** without `UPSTREAM_PROXY`, `gen-squid-conf` emits no `cache_peer`. With it, the config has `cache_peer`, `never_direct allow all`, and an `always_direct` rule only for the validated `UPSTREAM_BYPASS` hosts. An invalid bypass entry stops the proxy before Squid starts.
 
 ## 12. Open Questions
 
@@ -1554,3 +1608,17 @@ Caveats seen in the spike:
 
 - A no-cors `fetch` and `sendBeacon` report success to the page even when the proxy denies them, because the response is opaque. The proxy log and the fake-internet log are the authority, not page-side results.
 - Chrome's background requests (`www.google.com`, `update.googleapis.com`) show up as denied. That is why denied egress is reported in `run.json` rather than failing the run (§6.6).
+
+## 14. Quality Gates
+
+All gates must pass before a change lands. `npm run check` runs the first five; the acceptance suite runs separately because it needs Docker and takes minutes.
+
+| Gate | Command | Rule |
+|---|---|---|
+| Format + lint | `npm run lint` | `biome check --error-on-warnings .`: zero findings |
+| Typecheck | `npm run typecheck` | `tsc --noEmit` with TypeScript 7 (`strict`, `erasableSyntaxOnly`) |
+| Unit tests + coverage | `npm run test:coverage` | `node:test` over `tests/unit/**`. On the pure modules: lines ≥ 90%, branches ≥ 80%, functions ≥ 90%. IO modules are excluded here because the acceptance suite covers them. |
+| Shell lint | `npm run lint:shell` | shellcheck (pinned image) over every script under `docker/` and `scripts/` |
+| Dockerfile lint | `npm run lint:docker` | hadolint (pinned image) over every Dockerfile. Each ignored rule is justified in `.hadolint.yaml`. |
+| Acceptance | `npm run test:acceptance` | `tests/acceptance/run.ts` automates every criterion in §11 against the fixture site (`tests/fixtures/sites`, ground-truth request log) with stub models. It writes `artifacts/acceptance-<ts>/report.{json,md}`. |
+| Live smoke | `scripts/run-test.sh specs/login.json <provider>/<model>` per provider | A real-model run of the login spec against the fixture site ends `PASSED`. This requires keys in `./secrets/`. |

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+for _ in $(seq 1 100); do
+  if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then exec "$@"; fi
+  sleep 0.1
+done
+echo "wait-for-x: display $DISPLAY not ready after 10s" >&2
+exit 1

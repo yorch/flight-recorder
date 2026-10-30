@@ -1,0 +1,4 @@
+services:
+  orchestrator:
+    environment:
+      SCREEN_WIDTH: "800"

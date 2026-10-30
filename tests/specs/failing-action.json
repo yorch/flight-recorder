@@ -1,0 +1,6 @@
+{
+  "name": "failing-action",
+  "start_url": "http://app.test/login",
+  "goal": "Click a missing element.",
+  "allowed_origins": ["http://app.test"]
+}

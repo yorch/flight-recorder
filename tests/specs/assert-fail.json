@@ -1,0 +1,7 @@
+{
+  "name": "assert-fail",
+  "start_url": "http://app.test/login",
+  "goal": "Assert something false.",
+  "allowed_origins": ["http://app.test"],
+  "expect": [{ "kind": "visible", "role": "region", "name": "Recent orders" }]
+}

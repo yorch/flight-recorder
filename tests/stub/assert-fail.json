@@ -1,0 +1,6 @@
+{
+  "turns": [
+    { "action": { "kind": "assert_visible", "label": "Nonexistent region", "role": "region", "name": "Does Not Exist" } },
+    { "action": { "kind": "done", "status": "PASSED", "summary": "unreachable" } }
+  ]
+}

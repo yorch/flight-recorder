@@ -1,0 +1,27 @@
+{
+  "turns": [
+    {
+      "action": {
+        "kind": "type",
+        "label": "Enter email",
+        "ref_for": { "role": "textbox", "name": "Email" },
+        "text": "{{secret:TEST_USER_EMAIL}}",
+        "mode": "replace"
+      },
+      "sleep_ms": 3000
+    },
+    {
+      "action": {
+        "kind": "type",
+        "label": "Enter password",
+        "ref_for": { "role": "textbox", "name": "Password" },
+        "text": "{{secret:TEST_USER_PASSWORD}}",
+        "mode": "replace"
+      },
+      "sleep_ms": 3000
+    },
+    { "action": { "kind": "click", "label": "Click Sign in", "ref_for": { "role": "button", "name": "Sign in" } } },
+    { "action": { "kind": "assert_visible", "label": "Dashboard visible", "role": "region", "name": "Recent orders" } },
+    { "action": { "kind": "done", "status": "PASSED", "summary": "Logged in and dashboard region is visible" } }
+  ]
+}

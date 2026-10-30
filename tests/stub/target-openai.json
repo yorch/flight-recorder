@@ -1,0 +1,7 @@
+{
+  "image_size_from": "openai",
+  "turns": [
+    { "action": { "kind": "click_at", "label": "Hit target", "x": 0, "y": 0, "point_from_screen": { "x": 840, "y": 430 } } },
+    { "action": { "kind": "done", "status": "PASSED", "summary": "clicked" } }
+  ]
+}

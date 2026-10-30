@@ -1,0 +1,16 @@
+{
+  "image_size_from": "screen",
+  "turns": [
+    { "action": { "kind": "click_at", "label": "c0", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c1", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c2", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c3", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c4", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c5", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c6", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c7", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c8", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "click_at", "label": "c9", "x": 220, "y": 200, "point_from_screen": { "x": 220, "y": 200 } }, "sleep_ms": 700 },
+    { "action": { "kind": "done", "status": "PASSED", "summary": "clicked 10 times" } }
+  ]
+}

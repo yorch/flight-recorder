@@ -1,0 +1,16 @@
+export const PARAMS = {
+  FPS: 30,
+  PRE_PAD: 0.3,
+  POST_PAD: 1.0,
+  MIN_IDLE: 1.5,
+  IDLE_SPEED: 8,
+  IDLE_MAX_OUT: 1.5,
+  ZOOM_RAMP: 0.4,
+  ZOOM_HOLD: 0.8,
+  ZOOM_MAX: 2.0,
+  ZOOM_CONTEXT: 3,
+  ZOOM_MERGE_GAP: 1.0,
+  DEFAULT_TARGET: { width: 480, height: 270 },
+  ACTIVE_MAX: 4.0,
+  ACTIVE_KEEP: 1.5,
+} as const;

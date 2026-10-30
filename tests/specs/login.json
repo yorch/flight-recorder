@@ -1,0 +1,14 @@
+{
+  "name": "login",
+  "start_url": "http://app.test/login",
+  "goal": "Sign in as the test user and open the dashboard.",
+  "allowed_origins": ["http://app.test"],
+  "expect": [
+    { "kind": "url", "matches": "^http://app\\.test/dashboard" },
+    { "kind": "visible", "role": "region", "name": "Recent orders" }
+  ],
+  "secrets": {
+    "TEST_USER_EMAIL": { "origins": ["http://app.test"], "input_types": ["email", "text"] },
+    "TEST_USER_PASSWORD": { "origins": ["http://app.test"], "input_types": ["password"] }
+  }
+}

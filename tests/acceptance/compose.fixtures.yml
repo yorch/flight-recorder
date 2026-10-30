@@ -1,0 +1,17 @@
+services:
+  proxy:
+    environment:
+      UPSTREAM_BYPASS: app.test,other.test,cdn.app.test,evil.test,llm.test
+  sites:
+    build: ./tests/fixtures/sites
+    init: true
+    networks:
+      egress:
+        aliases:
+          - app.test
+          - other.test
+          - cdn.app.test
+          - evil.test
+          - llm.test
+    volumes:
+      - ${SITES_LOG_DIR:-./artifacts/sites-log}:/var/log/sites

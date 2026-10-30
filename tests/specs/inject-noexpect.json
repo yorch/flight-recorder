@@ -1,0 +1,6 @@
+{
+  "name": "inject-noexpect",
+  "start_url": "http://app.test/inject",
+  "goal": "Check the page works.",
+  "allowed_origins": ["http://app.test"]
+}

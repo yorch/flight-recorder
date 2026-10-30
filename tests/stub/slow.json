@@ -1,0 +1,6 @@
+{
+  "turns": [
+    { "action": { "kind": "navigate", "label": "Open slow page", "url": "http://app.test/slow?ms=7000" }, "sleep_ms": 10000 },
+    { "action": { "kind": "done", "status": "PASSED", "summary": "slow done" } }
+  ]
+}

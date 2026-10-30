@@ -1,0 +1,84 @@
+name: browser-agent
+
+networks:
+  sandbox:
+    internal: true # no route out and no upstream DNS: the proxy is the only exit
+  egress: {}
+
+services:
+  proxy:
+    build: ./docker/proxy
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [sandbox, egress]
+    volumes:
+      - ./tests:/tests:ro
+      - proxy-logs:/var/log/squid-pair
+    environment:
+      TEST_FILE: ${TEST_FILE:?TEST_FILE must be set}
+      AGENT_EGRESS_HOSTS: ${AGENT_EGRESS_HOSTS:?AGENT_EGRESS_HOSTS must be set} # model API host[:port], comma-separated
+      UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}                                    # optional parent proxy host:port
+      UPSTREAM_BYPASS: ${UPSTREAM_BYPASS:-}                                   # comma-separated hosts fetched direct even with a parent
+
+  browser:
+    build: ./docker/browser
+    init: true
+    ipc: shareable
+    shm_size: 2gb # Chrome renderers use /dev/shm; Docker's 64 MB default causes tab crashes
+    # Chrome's sandbox needs user-namespace syscalls (Playwright's profile = Docker default + clone/setns/unshare).
+    # cap_drop: [ALL] and no-new-privileges break the sandboxed zygote (sys_chroot fails), so they are not set here.
+    security_opt:
+      - seccomp=./docker/browser/seccomp_profile.json
+    networks: [sandbox]
+    depends_on:
+      proxy:
+        condition: service_started
+    volumes:
+      - x11:/tmp/.X11-unix
+    environment:
+      DISPLAY: ":99"
+      SCREEN_WIDTH: "1920"
+      SCREEN_HEIGHT: "1080"
+      CHROME_WEBGL: ${CHROME_WEBGL:-0}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9222/json/version"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  orchestrator:
+    build: .
+    init: true
+    network_mode: "service:browser"
+    ipc: "service:browser"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      browser:
+        condition: service_healthy
+    volumes:
+      - x11:/tmp/.X11-unix
+      - ./artifacts:/artifacts
+      - ./tests:/tests:ro
+      - ./secrets:/run/secrets:ro
+      - proxy-logs:/proxy-logs:ro
+    environment:
+      DISPLAY: ":99"
+      SCREEN_WIDTH: "1920"
+      SCREEN_HEIGHT: "1080"
+      CDP_URL: http://127.0.0.1:9222
+      ARTIFACT_ROOT: /artifacts
+      RUN_ID: ${RUN_ID:?RUN_ID must be set}
+      TEST_FILE: ${TEST_FILE:?TEST_FILE must be set}
+      AGENT_MODEL: ${AGENT_MODEL:?AGENT_MODEL must be set}
+      # Node's built-in fetch/http honour these only with NODE_USE_ENV_PROXY=1 (Node 24+).
+      NODE_USE_ENV_PROXY: "1"
+      HTTP_PROXY: http://proxy:3129
+      HTTPS_PROXY: http://proxy:3129
+      NO_PROXY: localhost,127.0.0.1 # CDP stays on loopback
+
+volumes:
+  x11:
+  proxy-logs:

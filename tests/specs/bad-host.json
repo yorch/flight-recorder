@@ -1,0 +1,7 @@
+{
+  "name": "bad-host",
+  "start_url": "http://app.test/login",
+  "goal": "x",
+  "allowed_origins": ["http://app.test"],
+  "allowed_hosts": ["ok.test\nhttp_access allow all"]
+}

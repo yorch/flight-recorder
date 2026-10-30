@@ -1,0 +1,1 @@
+{ "name": "target", "start_url": "http://app.test/target", "goal": "Click the target.", "allowed_origins": ["http://app.test"] }

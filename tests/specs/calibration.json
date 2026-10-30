@@ -1,0 +1,6 @@
+{
+  "name": "calibration",
+  "start_url": "http://app.test/calibration",
+  "goal": "Click the button ten times.",
+  "allowed_origins": ["http://app.test"]
+}
