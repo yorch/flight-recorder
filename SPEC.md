@@ -1619,6 +1619,200 @@ All gates must pass before a change lands. `npm run check` runs the first five; 
 | Typecheck | `npm run typecheck` | `tsc --noEmit` with TypeScript 7 (`strict`, `erasableSyntaxOnly`) |
 | Unit tests + coverage | `npm run test:coverage` | `node:test` over `tests/unit/**`. On the pure modules: lines ≥ 90%, branches ≥ 80%, functions ≥ 90%. IO modules are excluded here because the acceptance suite covers them. |
 | Shell lint | `npm run lint:shell` | shellcheck (pinned image) over every script under `docker/` and `scripts/` |
-| Dockerfile lint | `npm run lint:docker` | hadolint (pinned image) over every Dockerfile. Each ignored rule is justified in `.hadolint.yaml`. |
+| Dockerfile lint | `npm run lint:docker` | hadolint (pinned image) over every Dockerfile. Ignores are inline `# hadolint ignore=` comments, limited to DL3008 (unpinned apt packages, deliberate: latest Chrome/Squid) and DL4006 (no `pipefail` in `sh`). |
 | Acceptance | `npm run test:acceptance` | `tests/acceptance/run.ts` automates every criterion in §11 against the fixture site (`tests/fixtures/sites`, ground-truth request log) with stub models. It writes `artifacts/acceptance-<ts>/report.{json,md}`. |
 | Live smoke | `scripts/run-test.sh specs/login.json <provider>/<model>` per provider | A real-model run of the login spec against the fixture site ends `PASSED`. This requires keys in `./secrets/`. |
+
+## 15. Natural-Language Runs: Plan, Execute, Evaluate, Report
+
+> **Status: designed, not yet implemented** (as of 2026-10-30). §0–§14 are implemented, and the acceptance suite passes criteria 1–21. The phase plan is in `AGENTS.md`.
+
+A run can be requested with plain instructions, for example: "Go to the blog admin, create a new post titled 'Launch' with the image hero.png, publish it, and check that it appears on the public blog." The orchestrator turns the instructions into a plan, executes it, evaluates the outcome, and writes a report with video and screenshots.
+
+### 15.1 Request and TestSpec Extensions
+
+`TestSpec` (§6.1) gains these fields:
+
+```typescript
+  title?: string;               // display name; defaults to `name`
+  goal: string;                 // the natural-language instructions (unchanged field, now multi-step)
+  assets?: string[];            // file names available for upload, resolved under /run-input/assets (or /tests/assets)
+  review_plan?: boolean;        // pause for approval after planning (default false)
+  approval_timeout_s?: number;  // default 1800; no approval in time ends the run CANCELLED
+```
+
+`allowed_origins` defaults to `[origin(start_url)]` when it is omitted.
+
+### 15.2 Planning (`src/agent/planner.ts`)
+
+Before connecting to the browser, the orchestrator makes one structured model call. The input is the instructions, `start_url`, the asset names and the secret placeholder names. **No page content** is included, so page text cannot influence the plan. The output (`plan.json`):
+
+```typescript
+interface Plan {
+  title: string;
+  steps: { id: string; intent: string; expected: string }[];   // ids p1, p2, …, in order
+  criteria: { id: string; description: string }[];             // ids c1, c2, …: what must be true at the end
+}
+```
+
+- The plan is validated with zod: 1–30 steps, 1–15 criteria, unique ids.
+- **Approval.** With `review_plan`, the orchestrator writes `plan.json` and sets `status.json` to `awaiting_approval`. It then polls `/control/approval.json` (`{ "decision": "approve" | "reject", "plan"?: Plan }`, written by the control plane). An approved plan may be edited, and it is validated again.
+- **Timing.** Recording starts only after approval, so the video contains no idle approval wait. Rejection or a timeout ends the run with status `CANCELLED`.
+
+### 15.3 Plan-Aware Execution
+
+The agent (§6.3) receives the plan and the step statuses so far in every turn. `AgentAction` (§6.2) changes as follows:
+
+- Every action except `done` carries `plan_step: "pN"`. Assertions carry `criterion: "cN" | null`.
+- `step_done { plan_step, status: PASSED|FAILED, notes }` closes a plan step. It is recorded as an `ACTION_START`/`ACTION_END` pair with mode `AGENT`, action `step`.
+- `upload { ref, files: string[] }` uploads declared assets.
+  - If the ref is an `<input type=file>`, the engine calls `setInputFiles`.
+  - Otherwise it clicks the ref while waiting for the `filechooser` event, then calls `fileChooser.setFiles`. Playwright intercepts the chooser, so no native dialog opens.
+  - File names must be in `assets`. Names are matched exactly, never treated as paths, so there is no traversal. Playwright transfers the file contents to the remote browser.
+- `assert_url { label, plan_step, criterion, matches }` checks the current URL against a regular expression.
+- Chapters (§7.5) are labelled `pN · <label>`. `chapters.json` adds `plan_step` to each chapter.
+
+### 15.4 Evaluation (`src/agent/evaluator.ts`)
+
+After execution and post-processing, a **separate** structured model call acts as the judge. It gets:
+
+- the instructions and the plan;
+- the step log: each action with its label, plan step, result and error;
+- every assertion with its outcome and criterion;
+- the agent's `done` summary;
+- up to 8 screenshots: the last observation of each plan step plus the final page, resized to the model's `imageSize`.
+
+Its system prompt treats all page-derived content as untrusted data. Output (`evaluation.json`):
+
+```typescript
+interface Evaluation {
+  criteria: { id: string; status: 'MET' | 'NOT_MET' | 'UNCLEAR'; evidence: string; screenshots: string[] }[];
+  issues: { severity: 'high' | 'medium' | 'low'; title: string; description: string; plan_step: string | null; screenshot: string | null }[];
+  conclusions: string;                 // short narrative: what was done, what worked, what didn't
+}
+```
+
+### 15.5 Verdict (supersedes §6.4 for runs with a plan)
+
+A criterion is **verified** when at least one harness-executed assertion with that `criterion` passed and the evaluator marked it `MET`.
+
+| Condition | Status |
+|---|---|
+| Harness error or budget exceeded | `FAILED` |
+| Any assertion failed, any `step_done` FAILED, agent claimed `FAILED`, any criterion `NOT_MET`, or any `high` issue | `FAILED` |
+| Agent claimed `PASSED`, every plan step `step_done` PASSED, every criterion verified, and `spec.expect` (if present) all pass | `PASSED` |
+| Anything else (for example, a criterion with no passing assertion, or one marked `UNCLEAR`) | `UNVERIFIED` |
+| Rejected or timed-out plan, or a cancel from the control plane | `CANCELLED` (exit 4) |
+
+The evaluator can only downgrade a run: its `MET` never passes a criterion without deterministic evidence. `RunStatus` becomes `PASSED | FAILED | UNVERIFIED | CANCELLED`.
+
+### 15.6 Status and Report
+
+- **`status.json`.** The orchestrator rewrites this file atomically at every phase change: `{ phase: planning | awaiting_approval | running | evaluating | postprocessing | done, plan_step, step_id, updated_at }`.
+- **`report.json`.** Built deterministically by the harness, with the evaluator's text embedded as data. It holds:
+  - run metadata (title, status, summary, model, start URL, timing, tokens, Chrome version);
+  - the instructions;
+  - the plan, with each step's outcome, notes and its chapter's start time in `final.mp4`;
+  - the criteria with assertion evidence, evaluator status and screenshot paths;
+  - the issues, the conclusions and the egress summary;
+  - the artifact paths: `final.mp4`, `raw.mkv`, `chapters.vtt` and the screenshots.
+- **`report.md` and `report.html`** are generated from `report.json`. `report.html` is self-contained: inline CSS and no scripts. It embeds `<video src="final.mp4">` with `<track kind="chapters" src="chapters.vtt">`, plus a screenshot gallery. **Every string is HTML-escaped**, because the evaluator's text and page titles are untrusted.
+
+## 16. Control Plane and Web UI
+
+> **Status: designed, not yet implemented.** User decisions: the control plane runs in a container behind a host runner daemon; plan review is an optional per-run toggle; the UI is React + Vite; it is localhost only, with no login.
+
+```text
+ browser (you) --http--> ui container (127.0.0.1:7070, React SPA + API)
+                              |  token-authenticated HTTP
+                              v
+                         runner daemon (host, npm run runner) --docker compose--> run pairs (§1)
+                              |
+              ./data (requests, control)   ./artifacts (results)   shared by ui (ro artifacts) and runner
+```
+
+### 16.1 Runner Daemon (`src/runner/`, host process)
+
+- **Process.** Node 26 on the host (`npm run runner`). It is the only component that talks to Docker.
+- **Network.** It listens on `RUNNER_BIND` (default `127.0.0.1:7071`). On Linux, set it to the docker0 gateway (`172.17.0.1:7071`), because containers can't reach the host's loopback there. The UI reaches it at `http://host.docker.internal:7071`, with `extra_hosts: host-gateway`.
+- **Auth.** Every request needs `Authorization: Bearer <token>`, read from `./secrets/RUNNER_TOKEN` (generated on first start if absent). Comparison is constant-time.
+- **API:**
+  - `POST /runs {run_id}`: the request must already exist at `./data/requests/<run_id>/` (`request.json`, `spec.json`, `assets/`, `control/`).
+  - `POST /runs/:id/cancel`.
+  - `GET /runs/:id`: `queued | starting | running | exited(code) | cancelled`.
+  - `GET /health`.
+- **Validation.** `run_id` must match `^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$`, and paths are resolved and checked to stay under `./data/requests`. `spec.json` is validated with the TestSpec schema, and the model provider must be `anthropic`, `openai` or `stub`.
+- **Launching.** It runs the fixed `docker compose` invocation from `scripts/run-test.sh` through `execFile`. There is no shell and no caller-supplied command or compose file.
+- **Queueing.** A FIFO queue with `MAX_CONCURRENT_RUNS` (default 2). Cancelling a queued run removes it from the queue; cancelling a running run writes `control/cancel` (the orchestrator stops at its next step with `CANCELLED`), then runs `down -v` after 30 s.
+- **Compose changes.** The run's input directory is mounted read-only at `/run-input` in the orchestrator and the proxy, and its control directory read-only at `/control` in the orchestrator. `TEST_FILE=/run-input/spec.json`.
+
+### 16.2 Control-Plane API (`src/server/`, ui container)
+
+Node 26 with `node:http`. It serves the built SPA and a JSON API.
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/runs` | All runs, newest first. Status is merged from `request.json`, the runner state, `status.json` and `run.json`. |
+| `POST /api/runs` | Create a run from the form: title, instructions, start URL, model, credentials, extra hosts/origins, budgets, `review_plan`, assets. Uploads are `multipart/form-data`, at most 20 files of up to 25 MB each, with names sanitised to `[A-Za-z0-9._-]`. Writes the request dir, then calls the runner. |
+| `GET /api/runs/:id` | Request, status, plan, report and events summary. |
+| `GET /api/runs/:id/events` | Server-sent events: tail of `events.jsonl` plus `status.json` changes. |
+| `POST /api/runs/:id/approve` | `{ plan? }`; writes `control/approval.json`. |
+| `POST /api/runs/:id/reject` | Writes a reject decision. |
+| `POST /api/runs/:id/cancel` | Cancels through the runner. |
+| `POST /api/runs/:id/rerun` | New run from the same request and assets. |
+| `GET /api/models` | Providers whose key files exist, with suggested model ids. |
+| `GET /api/secrets` | Names only of files in `./secrets` (excluding API and runner keys). Values are never returned. |
+| `GET /artifacts/:id/*` | Read-only artifact files. |
+
+**Credentials** are picked by name from `/api/secrets`, with their input types. Their origins default to the start URL's origin. Secret values are managed as files in `./secrets/` and are never entered in or shown by the UI.
+
+**Security (localhost-only, no login):**
+
+- The server is published only on `127.0.0.1:7070`.
+- Every request's `Host` header must be `localhost:7070` or `127.0.0.1:7070`, which blocks DNS rebinding.
+- Mutating requests need `Origin` matching one of those hosts and a JSON or multipart content type, which blocks CSRF.
+- Artifacts are served with `Content-Security-Policy: sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'`, `X-Content-Type-Options: nosniff`, and path-traversal checks.
+- The SPA renders report data through React (escaped). It never injects artifact HTML; `report.html` opens in a sandboxed iframe or a new tab.
+
+### 16.3 Web UI (`ui/`, React + Vite + TypeScript)
+
+- **Runs list:** status badges (queued, planning, awaiting approval, running, evaluating, passed, failed, unverified, cancelled), title, model, created, duration, steps and tokens. Filterable, auto-refreshing.
+- **New run:** the form from §16.2. "Review plan before executing" is off by default.
+- **Run detail:**
+  - live phase and current plan step via SSE, with the latest screenshot;
+  - the plan, with per-step status; while `awaiting_approval` it is editable, with Approve and Reject buttons;
+  - the report: verdict, conclusions, criteria table with evidence, and issues;
+  - the video (`final.mp4` with a clickable chapter list that seeks the player, plus a link to `raw.mkv`);
+  - a screenshot gallery grouped by plan step, with a lightbox;
+  - the step timeline, the egress summary and artifact downloads;
+  - Cancel and Rerun buttons.
+
+### 16.4 Additional Acceptance Criteria
+
+22. **NL blog scenario** (stub model, fixture blog app):
+    - The instructions "log in, create a post with title X and image hero.png, publish it, verify it on the public blog" produce a valid plan, and the run executes it.
+    - Fixture ground truth shows the uploaded file's SHA-256 equals the asset's, and the public page lists the post.
+    - `report.json`, `report.md` and `report.html` exist and reference `final.mp4`, `chapters.vtt` and every plan step's screenshots.
+    - The status is `PASSED`.
+23. **Plan approval:**
+    - With `review_plan`, `status.json` reaches `awaiting_approval` and `raw.mkv` doesn't exist yet.
+    - Approving an edited plan executes exactly the edited steps.
+    - Reject, or the approval timeout, ends the run `CANCELLED` (exit 4).
+24. **Evaluator can only downgrade:**
+    - An evaluator `NOT_MET` produces `FAILED`, even with passing assertions.
+    - `MET` without a passing assertion for that criterion produces `UNVERIFIED`.
+    - A `high` issue produces `FAILED`.
+25. **Upload restrictions:** uploading an undeclared name, or a name containing `/` or `..`, is an action error, and nothing reaches the fixture.
+26. **Report and UI escaping:** an evaluator conclusion and a page title containing `<script>`/`<img onerror>` are inert in `report.html` (escaped) and in the SPA. Artifact responses carry the CSP sandbox header.
+27. **Runner security and queueing:**
+    - Missing or wrong tokens get 401.
+    - A malformed `run_id`, a path-traversal attempt, an invalid spec or an unknown provider gets 400.
+    - With `MAX_CONCURRENT_RUNS=1`, a second run stays `queued` until the first finishes.
+    - Cancelling a queued run removes it; cancelling a running run ends it `CANCELLED`.
+28. **UI request guards:** a wrong `Host` header gets 421; a mutating request with a foreign or missing `Origin`, or a `text/plain` body, gets 403.
+29. **UI end to end** (Playwright, run against the UI container):
+    - Create a run from the form (stub model, with an asset upload) and see live phase updates.
+    - Approve a plan when review is on.
+    - Open the finished run: the verdict and conclusions render, the video loads with a chapter list, a chapter click seeks the player, and the screenshots render.
+    - Cancel and Rerun work.
+30. **Live smoke (real model):** the blog scenario submitted through the UI with `anthropic/claude-opus-5-5` ends `PASSED`, and its report has a non-empty plan, conclusions, video and screenshots.

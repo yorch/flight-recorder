@@ -3,3 +3,4 @@ artifacts/
 coverage/
 secrets/*
 !secrets/.gitkeep
+.DS_Store
