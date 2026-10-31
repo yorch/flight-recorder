@@ -22,12 +22,16 @@ try {
 if (!runnerToken) console.log('server: empty RUNNER_TOKEN — calls to the runner will fail');
 
 let actualPort = PORT;
+const extraHosts = (process.env.UI_ALLOWED_HOSTS ?? '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
 const handler = createApiHandler({
   dataDir,
   artifactsDir,
   secretsDir,
   uiDist,
-  allowedHosts: () => [`localhost:${actualPort}`, `127.0.0.1:${actualPort}`],
+  allowedHosts: () => [`localhost:${actualPort}`, `127.0.0.1:${actualPort}`, `[::1]:${actualPort}`, ...extraHosts],
   runner: httpRunnerClient(runnerUrl, runnerToken),
 });
 

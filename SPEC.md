@@ -1770,7 +1770,7 @@ Node 26 with `node:http`. It serves the built SPA and a JSON API.
 **Security (localhost-only, no login):**
 
 - The server is published only on `127.0.0.1:7070`.
-- Every request's `Host` header must be `localhost:7070` or `127.0.0.1:7070`, which blocks DNS rebinding.
+- Every request's `Host` header must be `localhost:7070`, `127.0.0.1:7070` or `[::1]:7070`, which blocks DNS rebinding. Operators reaching the UI through a forward or tunnel can extend the list with `UI_ALLOWED_HOSTS` (comma-separated `host:port`), passed through `docker-compose.ui.yml`.
 - Mutating requests need `Origin` matching one of those hosts and a JSON or multipart content type, which blocks CSRF.
 - Artifacts are served with `Content-Security-Policy: sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'`, `X-Content-Type-Options: nosniff`, and path-traversal checks.
 - The SPA renders report data through React (escaped). It never injects artifact HTML; `report.html` opens in a sandboxed iframe or a new tab.

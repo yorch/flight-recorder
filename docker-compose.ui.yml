@@ -16,6 +16,8 @@ services:
       PORT: "7070"
       BIND: 0.0.0.0 # inside the container; published only on 127.0.0.1
       RUNNER_URL: http://host.docker.internal:7071
+      # Extra Host headers to accept (forwarded/tunneled access), e.g. "mbp.local:7070,ts-host:7070"
+      UI_ALLOWED_HOSTS: ${UI_ALLOWED_HOSTS:-}
       DATA_DIR: /data
       ARTIFACTS_DIR: /artifacts
       SECRETS_DIR: /run/secrets

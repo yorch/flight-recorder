@@ -449,7 +449,8 @@ export function createApiHandler(deps: ServerDeps) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       const allowed = deps.allowedHosts();
-      if (!hostAllowed(req.headers.host, allowed)) return json(res, 421, { error: 'misdirected request' });
+      if (!hostAllowed(req.headers.host, allowed))
+        return json(res, 421, { error: 'misdirected request', hint: `Host must be one of: ${allowed.join(', ')}` });
       const guard = mutationGuard(req.method, req.headers, allowed);
       if (guard !== 'ok') return json(res, 403, { error: guard === 'bad-origin' ? 'origin not allowed' : 'content type not allowed' });
       if (req.method !== 'GET' && req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
