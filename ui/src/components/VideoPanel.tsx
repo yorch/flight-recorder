@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ChaptersFile } from '../lib/api.ts';
 import { artifactUrl } from '../lib/api.ts';
 import { StatusBadge } from './StatusBadge.tsx';
@@ -13,11 +13,13 @@ export function activeChapter(chapters: ChaptersFile['chapters'], t: number) {
 /** §16.3: final.mp4 player + clickable chapter list that seeks the player. */
 export function VideoPanel({ runId, data }: { runId: string; data: ChaptersFile | null }) {
   const video = useRef<HTMLVideoElement | null>(null);
+  const [time, setTime] = useState(0);
   if (!data || data.chapters.length === 0) return null;
 
   const seek = (t: number) => {
     if (video.current) {
       video.current.currentTime = t;
+      setTime(t);
       // jsdom's play() returns undefined; browsers return a promise that may reject.
       const p = video.current.play() as Promise<void> | undefined;
       void p?.catch(() => {});
@@ -26,20 +28,40 @@ export function VideoPanel({ runId, data }: { runId: string; data: ChaptersFile 
 
   return (
     <section className="panel" data-testid="video-panel">
-      <h3>Video</h3>
-      {/* biome-ignore lint/a11y/useMediaCaption: screen-capture video has no audio; chapters.vtt is a chapters track, not captions */}
-      <video ref={video} controls preload="auto" src={artifactUrl(runId, data.video || 'final.mp4')} data-testid="run-video">
-        <track kind="chapters" src={artifactUrl(runId, 'chapters.vtt')} default />
-      </video>
-      <ol className="chapters" data-testid="chapter-list">
-        {data.chapters.map((c) => (
-          <li key={c.id}>
-            <button type="button" className="chapter" data-start={c.start} onClick={() => seek(c.start)}>
-              <span className="mono">{c.start.toFixed(1)}s</span> {c.title} <StatusBadge status={c.status} />
-            </button>
-          </li>
-        ))}
-      </ol>
+      <div className="row spread">
+        <h3>Recording</h3>
+        <span className="muted small">
+          {data.chapters.length} chapters · {data.duration.toFixed(1)}s
+        </span>
+      </div>
+      <div className="video-layout">
+        {/* biome-ignore lint/a11y/useMediaCaption: screen-capture video has no audio; chapters.vtt is a chapters track, not captions */}
+        <video
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          ref={video}
+          controls
+          preload="auto"
+          src={artifactUrl(runId, data.video || 'final.mp4')}
+          data-testid="run-video"
+        >
+          <track kind="chapters" src={artifactUrl(runId, 'chapters.vtt')} default />
+        </video>
+        <ol className="chapters" data-testid="chapter-list">
+          {data.chapters.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                className={`chapter ${activeChapter(data.chapters, time)?.id === c.id ? 'active' : ''}`}
+                aria-current={activeChapter(data.chapters, time)?.id === c.id ? 'step' : undefined}
+                data-start={c.start}
+                onClick={() => seek(c.start)}
+              >
+                <span className="mono">{c.start.toFixed(1)}s</span> {c.title} <StatusBadge status={c.status} />
+              </button>
+            </li>
+          ))}
+        </ol>
+      </div>
       <p className="muted small">
         <a href={artifactUrl(runId, 'raw.mkv')}>raw.mkv</a> · <a href={artifactUrl(runId, 'chapters.vtt')}>chapters.vtt</a> · duration{' '}
         {data.duration.toFixed(1)}s

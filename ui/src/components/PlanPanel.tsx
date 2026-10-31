@@ -57,59 +57,72 @@ export function PlanPanel({ plan, reportSteps, currentStep, editable, onApprove,
           <span className="muted"> {base.title}</span>
         )}
       </h3>
+      {editable && <p className="approval-hint">Execution is paused. Review the steps and success criteria before approving.</p>}
       {error && <div className="banner error">{error}</div>}
       {editable && changes.length > 0 && <div className="muted small">{changes.length} unsaved change(s) vs submitted plan</div>}
-      <table className="plan">
-        <thead>
-          <tr>
-            <th>Step</th>
-            <th>Intent</th>
-            <th>Expected</th>
-            <th>Status</th>
-            {editable && <th />}
-          </tr>
-        </thead>
-        <tbody>
-          {base.steps.map((s, i) => {
-            const st = outcome.get(s.id)?.outcome ?? (currentStep === s.id ? 'running' : 'open');
-            return (
-              <tr key={s.id} className={currentStep === s.id ? 'current' : ''}>
-                <td className="mono">{s.id}</td>
-                <td>
-                  {editable ? (
-                    <input aria-label={`${s.id} intent`} value={s.intent} onChange={(e) => updStep(i, { intent: e.target.value })} />
-                  ) : (
-                    s.intent
-                  )}
-                </td>
-                <td>
-                  {editable ? (
-                    <input aria-label={`${s.id} expected`} value={s.expected} onChange={(e) => updStep(i, { expected: e.target.value })} />
-                  ) : (
-                    s.expected
-                  )}
-                  {outcome.get(s.id)?.notes && <div className="muted small">{outcome.get(s.id)?.notes}</div>}
-                </td>
-                <td>
-                  <span className={`chip chip-${st.toLowerCase()}`}>{st}</span>
-                </td>
-                {editable && (
+      <div className="table-wrap">
+        <table className="plan">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Intent</th>
+              <th>Expected</th>
+              <th>Status</th>
+              {editable && <th />}
+            </tr>
+          </thead>
+          <tbody>
+            {base.steps.map((s, i) => {
+              const st = outcome.get(s.id)?.outcome ?? (currentStep === s.id ? 'running' : 'open');
+              return (
+                <tr key={s.id} className={currentStep === s.id ? 'current' : ''}>
+                  <td className="mono">{s.id}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn small"
-                      aria-label={`remove ${s.id}`}
-                      onClick={() => upd({ ...base, steps: base.steps.filter((_, j) => j !== i) })}
-                    >
-                      ×
-                    </button>
+                    {editable ? (
+                      <textarea
+                        rows={3}
+                        aria-label={`${s.id} intent`}
+                        value={s.intent}
+                        onChange={(e) => updStep(i, { intent: e.target.value })}
+                      />
+                    ) : (
+                      s.intent
+                    )}
                   </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  <td>
+                    {editable ? (
+                      <textarea
+                        rows={3}
+                        aria-label={`${s.id} expected`}
+                        value={s.expected}
+                        onChange={(e) => updStep(i, { expected: e.target.value })}
+                      />
+                    ) : (
+                      s.expected
+                    )}
+                    {outcome.get(s.id)?.notes && <div className="muted small">{outcome.get(s.id)?.notes}</div>}
+                  </td>
+                  <td>
+                    <span className={`chip chip-${st.toLowerCase()}`}>{st}</span>
+                  </td>
+                  {editable && (
+                    <td>
+                      <button
+                        type="button"
+                        className="btn small"
+                        aria-label={`remove ${s.id}`}
+                        onClick={() => upd({ ...base, steps: base.steps.filter((_, j) => j !== i) })}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       {editable && (
         <button
           type="button"
@@ -120,34 +133,41 @@ export function PlanPanel({ plan, reportSteps, currentStep, editable, onApprove,
         </button>
       )}
       <h4>Criteria</h4>
-      <table className="plan">
-        <tbody>
-          {base.criteria.map((c, i) => (
-            <tr key={c.id}>
-              <td className="mono">{c.id}</td>
-              <td>
-                {editable ? (
-                  <input aria-label={`${c.id} description`} value={c.description} onChange={(e) => updCrit(i, e.target.value)} />
-                ) : (
-                  c.description
-                )}
-              </td>
-              {editable && (
+      <div className="table-wrap">
+        <table className="plan">
+          <tbody>
+            {base.criteria.map((c, i) => (
+              <tr key={c.id}>
+                <td className="mono">{c.id}</td>
                 <td>
-                  <button
-                    type="button"
-                    className="btn small"
-                    aria-label={`remove ${c.id}`}
-                    onClick={() => upd({ ...base, criteria: base.criteria.filter((_, j) => j !== i) })}
-                  >
-                    ×
-                  </button>
+                  {editable ? (
+                    <textarea
+                      rows={2}
+                      aria-label={`${c.id} description`}
+                      value={c.description}
+                      onChange={(e) => updCrit(i, e.target.value)}
+                    />
+                  ) : (
+                    c.description
+                  )}
                 </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                {editable && (
+                  <td>
+                    <button
+                      type="button"
+                      className="btn small"
+                      aria-label={`remove ${c.id}`}
+                      onClick={() => upd({ ...base, criteria: base.criteria.filter((_, j) => j !== i) })}
+                    >
+                      ×
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {editable && (
         <>
           <button

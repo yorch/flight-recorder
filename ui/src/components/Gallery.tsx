@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Report } from '../lib/api.ts';
 import { screenshotUrl } from '../lib/api.ts';
 
@@ -28,6 +28,13 @@ export function groupScreenshots(report: Report | null, names: string[]): Group[
 
 export function Gallery({ runId, report, names }: { runId: string; report: Report | null; names: string[] }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const dialog = useRef<HTMLDialogElement | null>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const close = () => {
+    dialog.current?.close();
+    setLightbox(null);
+    opener.current?.focus();
+  };
   const groups = groupScreenshots(report, names);
   if (groups.length === 0) return null;
   return (
@@ -38,18 +45,31 @@ export function Gallery({ runId, report, names }: { runId: string; report: Repor
           <h4 className="muted">{g.label}</h4>
           <div className="gallery">
             {g.paths.map((p) => (
-              <button key={p} type="button" className="thumb" onClick={() => setLightbox(screenshotUrl(runId, p))}>
+              <button
+                key={p}
+                type="button"
+                className="thumb"
+                onClick={(e) => {
+                  opener.current = e.currentTarget;
+                  setLightbox(screenshotUrl(runId, p));
+                  dialog.current?.showModal();
+                }}
+              >
                 <img src={screenshotUrl(runId, p)} alt={p} loading="lazy" />
               </button>
             ))}
           </div>
         </div>
       ))}
-      {lightbox && (
-        <button type="button" className="lightbox" onClick={() => setLightbox(null)} aria-label="close lightbox">
-          <img src={lightbox} alt="screenshot" />
-        </button>
-      )}
+      <dialog ref={dialog} className="lightbox" aria-label="Screenshot preview" onCancel={close}>
+        <div className="row spread">
+          <span>Screenshot preview</span>
+          <button type="button" className="btn" onClick={close}>
+            Close preview
+          </button>
+        </div>
+        {lightbox && <img src={lightbox} alt="Expanded browser screenshot" />}
+      </dialog>
     </section>
   );
 }

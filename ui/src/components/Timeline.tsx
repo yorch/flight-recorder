@@ -18,31 +18,33 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
   return (
     <section className="panel" data-testid="timeline">
       <h3>Timeline</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>t</th>
-            <th>Kind</th>
-            <th>Step</th>
-            <th>Label</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((e) => (
-            <tr key={e.seq}>
-              <td className="mono">{((e.t_ms - t0) / 1000).toFixed(1)}s</td>
-              <td className="mono small">{e.type}</td>
-              <td className="mono">{e.step_id ?? e.plan_step ?? ''}</td>
-              <td>
-                {e.label ?? e.action ?? e.summary ?? e.test ?? ''}
-                {e.error && <div className="warn small">{e.error}</div>}
-              </td>
-              <td>{e.status && <span className={`chip chip-${e.status.toLowerCase()}`}>{e.status}</span>}</td>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>t</th>
+              <th>Kind</th>
+              <th>Step</th>
+              <th>Label</th>
+              <th>Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((e) => (
+              <tr key={e.seq}>
+                <td className="mono">{((e.t_ms - t0) / 1000).toFixed(1)}s</td>
+                <td className="mono small">{e.type}</td>
+                <td className="mono">{e.step_id ?? e.plan_step ?? ''}</td>
+                <td>
+                  {e.label ?? e.action ?? e.summary ?? e.test ?? ''}
+                  {e.error && <div className="warn small">{e.error}</div>}
+                </td>
+                <td>{e.status && <span className={`chip chip-${e.status.toLowerCase()}`}>{e.status}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

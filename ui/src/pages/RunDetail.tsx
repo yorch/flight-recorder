@@ -33,6 +33,8 @@ const ARTIFACT_FILES = [
 
 export function RunDetailPage({ id }: { id: string }) {
   const [detail, setDetail] = useState<RunDetail | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<StatusInfo | null>(null);
   const [liveRun, setLiveRun] = useState<RunJson | null>(null);
@@ -170,13 +172,22 @@ export function RunDetailPage({ id }: { id: string }) {
     await post('reject', {});
     await load();
   };
-  const onCancel = async () => {
-    await post('cancel', {});
-    await load();
-  };
-  const onRerun = async () => {
-    const r = await post<{ run_id: string }>('rerun', {});
-    nav(`/run/${r.run_id}`);
+  const act = async (action: 'cancel' | 'rerun') => {
+    setActionBusy(true);
+    setActionError(null);
+    try {
+      if (action === 'rerun') {
+        const r = await post<{ run_id: string }>('rerun', {});
+        nav(`/run/${r.run_id}`);
+      } else {
+        await post('cancel', {});
+        await load();
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const latestShot = shots.at(-1) ?? null;
@@ -186,7 +197,10 @@ export function RunDetailPage({ id }: { id: string }) {
   const badge = badgeOf(statusText);
 
   return (
-    <section>
+    <section className="run-detail">
+      <p className="eyebrow">
+        <a href="#/">Runs</a> / Execution detail
+      </p>
       <div className="row spread">
         <h2>
           {detail?.request && typeof (detail.request as { form?: { title?: string } }).form?.title === 'string'
@@ -194,10 +208,10 @@ export function RunDetailPage({ id }: { id: string }) {
             : (report?.title ?? id)}
         </h2>
         <div className="row">
-          <button type="button" className="btn danger" disabled={terminal} onClick={() => void onCancel()}>
+          <button type="button" className="btn danger" disabled={terminal || actionBusy} onClick={() => void act('cancel')}>
             Cancel
           </button>
-          <button type="button" className="btn" onClick={() => void onRerun()}>
+          <button type="button" className="btn" disabled={actionBusy} onClick={() => void act('rerun')}>
             Rerun
           </button>
           <a className="btn" href="#/">
@@ -205,13 +219,17 @@ export function RunDetailPage({ id }: { id: string }) {
           </a>
         </div>
       </div>
-      {error && <div className="banner error">{error}</div>}
+      {(error || actionError) && (
+        <div className="banner error" role="alert">
+          {actionError ?? error}
+        </div>
+      )}
       <div className="meta mono">
         <StatusBadge status={statusText} /> <span data-testid="phase">{badge.text}</span> · run <span>{id}</span>
         {detail?.status?.plan_step && <span> · step {detail.status.plan_step}</span>}
         {liveStatus?.plan_step && liveStatus.plan_step !== detail?.status?.plan_step && <span> · step {liveStatus.plan_step}</span>}
         {detail?.spec && typeof (detail.spec as { model?: string }).model === 'string' ? '' : ''}
-        <span> · sse {sseState}</span>
+        <span> · {terminal ? 'Evidence collected' : sseState === 'open' ? 'Live updates connected' : 'Connecting to live updates'}</span>
       </div>
       <div className="meta mono muted">
         {report?.model ?? (detail?.request as { model?: string } | null)?.model ?? ''} · started {fmtDateTime(run?.started_at ?? null)} ·
@@ -221,28 +239,65 @@ export function RunDetailPage({ id }: { id: string }) {
       </div>
       {run?.summary && <div className="banner">{run.summary}</div>}
 
+      <nav className="section-nav" aria-label="Run sections">
+        {['overview', 'plan', 'recording', 'screenshots', 'activity', 'downloads'].map((section) => (
+          <a
+            key={section}
+            href={`#section-${section}`}
+            onClick={(e) => {
+              e.preventDefault();
+              document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'instant', block: 'start' });
+            }}
+          >
+            {section}
+          </a>
+        ))}
+      </nav>
       <div className="cols">
         <div>
+          <div id="section-overview">
+            <ReportPanel runId={id} report={report} />
+          </div>
+          {!terminal && !latestShot && (
+            <div className="panel empty-state">
+              <h3>{awaiting ? 'Review the execution plan' : 'Preparing browser evidence'}</h3>
+              <p className="muted">
+                {awaiting
+                  ? 'Edit the steps and criteria below, then approve to begin.'
+                  : 'The latest browser observation will appear here as execution begins.'}
+              </p>
+            </div>
+          )}
           {!terminal && latestShot && (
             <section className="panel" data-testid="live-shot">
-              <h3>Live</h3>
+              <div className="row spread">
+                <h3>Live browser</h3>
+                <span className="chip chip-running">{liveStatus?.plan_step ?? detail?.status?.plan_step ?? badge.text}</span>
+              </div>
               <img src={artifactUrl(id, `screenshots/${latestShot}`)} alt="latest observation" className="live-img" />
             </section>
           )}
-          <PlanPanel
-            plan={detail?.plan ?? null}
-            reportSteps={report?.plan?.steps}
-            currentStep={liveStatus?.plan_step ?? detail?.status?.plan_step ?? null}
-            editable={awaiting}
-            onApprove={onApprove}
-            onReject={onReject}
-          />
-          <ReportPanel runId={id} report={report} />
-          <VideoPanel runId={id} data={chapters} />
-          <Gallery runId={id} report={report} names={shots} />
+          <div id="section-plan">
+            <PlanPanel
+              plan={detail?.plan ?? null}
+              reportSteps={report?.plan?.steps}
+              currentStep={liveStatus?.plan_step ?? detail?.status?.plan_step ?? null}
+              editable={awaiting}
+              onApprove={onApprove}
+              onReject={onReject}
+            />
+          </div>
+          <div id="section-recording">
+            <VideoPanel runId={id} data={chapters} />
+          </div>
+          <div id="section-screenshots">
+            <Gallery runId={id} report={report} names={shots} />
+          </div>
         </div>
         <div>
-          <Timeline events={events} />
+          <div id="section-activity">
+            <Timeline events={events} />
+          </div>
           {egress && (
             <section className="panel">
               <h3>Egress</h3>
@@ -253,7 +308,7 @@ export function RunDetailPage({ id }: { id: string }) {
             </section>
           )}
           {detail && (
-            <section className="panel">
+            <section className="panel" id="section-downloads">
               <h3>Artifacts</h3>
               <ul className="links">
                 {ARTIFACT_FILES.map((f) => (

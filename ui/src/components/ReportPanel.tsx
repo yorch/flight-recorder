@@ -19,46 +19,48 @@ export function ReportPanel({ runId, report }: { runId: string; report: Report |
       {report.plan && (
         <>
           <h3>Criteria</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Id</th>
-                <th>Description</th>
-                <th>Status</th>
-                <th>Evidence</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.plan.criteria.map((c) => (
-                <tr key={c.id}>
-                  <td className="mono">{c.id}</td>
-                  <td>{c.description}</td>
-                  <td>
-                    <span className={`chip chip-${(c.verified ? 'verified' : c.evaluator_status).toLowerCase()}`}>
-                      {c.verified ? 'VERIFIED' : c.evaluator_status}
-                    </span>
-                  </td>
-                  <td>
-                    {c.evidence}
-                    {c.screenshots.length > 0 && (
-                      <div className="small">
-                        {c.screenshots.map((s) => (
-                          <a key={s} href={screenshotUrl(runId, s)} target="_blank" rel="noreferrer">
-                            {s}
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                    {c.assertions.length > 0 && (
-                      <div className="muted small">
-                        {c.assertions.map((a) => `${a.step_id} ${a.label}: ${a.passed ? 'PASS' : 'FAIL'}`).join('; ')}
-                      </div>
-                    )}
-                  </td>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Id</th>
+                  <th>Description</th>
+                  <th>Status</th>
+                  <th>Evidence</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.plan.criteria.map((c) => (
+                  <tr key={c.id}>
+                    <td className="mono">{c.id}</td>
+                    <td>{c.description}</td>
+                    <td>
+                      <span className={`chip chip-${(c.verified ? 'verified' : c.evaluator_status).toLowerCase()}`}>
+                        {c.verified ? 'VERIFIED' : c.evaluator_status}
+                      </span>
+                    </td>
+                    <td>
+                      {c.evidence}
+                      {c.screenshots.length > 0 && (
+                        <div className="small">
+                          {c.screenshots.map((s) => (
+                            <a key={s} href={screenshotUrl(runId, s)} target="_blank" rel="noreferrer">
+                              {s}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                      {c.assertions.length > 0 && (
+                        <div className="muted small">
+                          {c.assertions.map((a) => `${a.step_id} ${a.label}: ${a.passed ? 'PASS' : 'FAIL'}`).join('; ')}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
       {report.issues.length > 0 && (
