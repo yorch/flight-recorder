@@ -11,13 +11,19 @@ const ROW_TYPES = new Set([
   'RUN_END',
 ]);
 
-export function Timeline({ events }: { events: TimelineEvent[] }) {
+export function Timeline({ events, maxRows }: { events: TimelineEvent[]; maxRows?: number }) {
   const rows = events.filter((e) => ROW_TYPES.has(e.type));
   if (rows.length === 0) return null;
+  const shown = maxRows === undefined ? rows : rows.slice(-maxRows);
   const t0 = rows[0]?.t_ms ?? 0;
   return (
     <section className="panel" data-testid="timeline">
       <h3>Timeline</h3>
+      {rows.length > shown.length && (
+        <p className="muted small">
+          last {shown.length} of {rows.length} events
+        </p>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
@@ -30,7 +36,7 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((e) => (
+            {shown.map((e) => (
               <tr key={e.seq}>
                 <td className="mono">{((e.t_ms - t0) / 1000).toFixed(1)}s</td>
                 <td className="mono small">{e.type}</td>

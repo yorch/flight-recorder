@@ -54,6 +54,12 @@ describe('buildSpec (§16.2 form → spec.json)', () => {
     assert.equal(spec.review_plan, true);
     assert.equal(spec.approval_timeout_s, 60);
   });
+  it('passes the network preset through and rejects bad values', () => {
+    assert.equal(buildSpec({ ...base, network: 'full' }).network, 'full');
+    assert.equal(buildSpec({ ...base, network: 'offline' }).network, 'offline');
+    assert.equal(buildSpec(base).network, undefined);
+    assert.throws(() => buildSpec({ ...base, network: 'banana' as never }), FormError);
+  });
   it('maps credentials to secret bindings on the start origin', () => {
     const spec = buildSpec({
       ...base,
@@ -366,6 +372,138 @@ describe('api handler over a real http server', () => {
     assert.match(body, /data: \{"seq":0,"type":"RUN_START"\}/);
     assert.match(body, /event: status/);
     assert.match(body, /event: done/);
+  });
+
+  it('exposes live progress via the detail API and the SSE stream (§16.3)', async () => {
+    const r = await api('POST', '/api/runs', {
+      body: { title: 'live', instructions: 'i', start_url: 'http://app.test', model: 'stub' },
+    });
+    assert.equal(r.code, 201);
+    const id = (JSON.parse(r.body) as { run_id: string }).run_id;
+    const art = path.join(artifactsDir, id);
+    fs.mkdirSync(path.join(art, 'agent'), { recursive: true });
+    fs.mkdirSync(path.join(art, 'screenshots'), { recursive: true });
+    fs.writeFileSync(
+      path.join(art, 'status.json'),
+      '{"phase":"running","plan_step":null,"step_id":null,"updated_at":"2026-01-01T00:00:00Z"}',
+    );
+    fs.writeFileSync(
+      path.join(art, 'plan.json'),
+      JSON.stringify({
+        title: 'p',
+        steps: [
+          { id: 'p1', intent: 'i1', expected: 'e1' },
+          { id: 'p2', intent: 'i2', expected: 'e2' },
+        ],
+        criteria: [{ id: 'c1', description: 'd' }],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(art, 'events.jsonl'),
+      [
+        {
+          seq: 0,
+          t_ms: Date.now() - 5000,
+          type: 'RUN_START',
+          run_id: id,
+          test: 't',
+          screen: { width: 1, height: 1 },
+          chrome_version: 'x',
+          model: 'm',
+        },
+        {
+          seq: 1,
+          t_ms: Date.now() - 4000,
+          type: 'ACTION_START',
+          step_id: 's0001',
+          label: 'wait 1',
+          action: 'assert',
+          mode: 'AGENT',
+          plan_step: 'p1',
+        },
+        { seq: 2, t_ms: Date.now() - 3500, type: 'ACTION_END', step_id: 's0001', status: 'PASSED' },
+        {
+          seq: 3,
+          t_ms: Date.now() - 3000,
+          type: 'ACTION_START',
+          step_id: 's0002',
+          label: 'p1 done',
+          action: 'step',
+          mode: 'AGENT',
+          plan_step: 'p1',
+        },
+        { seq: 4, t_ms: Date.now() - 2900, type: 'ACTION_END', step_id: 's0002', status: 'PASSED' },
+        {
+          seq: 5,
+          t_ms: Date.now() - 500,
+          type: 'ACTION_START',
+          step_id: 's0003',
+          label: 'click it',
+          action: 'click',
+          mode: 'ELEMENT',
+          plan_step: 'p2',
+        },
+      ]
+        .map((e) => `${JSON.stringify(e)}\n`)
+        .join(''),
+    );
+    fs.writeFileSync(
+      path.join(art, 'agent', 'transcript.jsonl'),
+      '{"step_id":"s0001","usage":{"input_tokens":10,"output_tokens":5}}\n{"step_id":"s0002","usage":{"input_tokens":20,"output_tokens":7}}\n',
+    );
+    fs.writeFileSync(path.join(art, 'screenshots', 's0001.png'), 'x');
+
+    const detail = JSON.parse((await api('GET', `/api/runs/${id}`)).body) as {
+      progress: {
+        phase: string;
+        plan_step: string;
+        step_id: string;
+        plan_steps: { id: string; status: string }[];
+        steps: { step_id: string; kind: string; label: string; result: string }[];
+        latest_screenshot: string;
+        counters: { elapsed_s: number; steps: number; tokens: { input: number; output: number } };
+        events: number;
+      };
+    };
+    const p = detail.progress;
+    assert.equal(p.phase, 'running');
+    assert.equal(p.plan_step, 'p2');
+    assert.equal(p.step_id, 's0003');
+    assert.deepEqual(p.plan_steps, [
+      { id: 'p1', status: 'passed' },
+      { id: 'p2', status: 'running' },
+    ]);
+    assert.equal(p.steps.length, 3);
+    assert.deepEqual(
+      p.steps.map((s) => [s.step_id, s.kind, s.label, s.result]),
+      [
+        ['s0001', 'assert', 'wait 1', 'passed'],
+        ['s0002', 'step', 'p1 done', 'passed'],
+        ['s0003', 'click', 'click it', 'running'],
+      ],
+    );
+    assert.equal(p.counters.steps, 3);
+    assert.deepEqual(p.counters.tokens, { input: 30, output: 12 });
+    assert.ok(p.counters.elapsed_s >= 4);
+    assert.equal(p.latest_screenshot, 's0001.png');
+    assert.equal(p.events, 6);
+
+    const body = await new Promise<string>((resolve) => {
+      const chunks: Buffer[] = [];
+      const req = http
+        .request({ host: '127.0.0.1', port, path: `/api/runs/${id}/events`, headers: { host: `127.0.0.1:${port}` } }, (res) => {
+          res.on('data', (c) => chunks.push(c));
+          setTimeout(() => {
+            req.destroy();
+            resolve(Buffer.concat(chunks).toString());
+          }, 1200);
+        })
+        .on('error', () => {});
+      req.end();
+    });
+    assert.match(body, /event: progress/);
+    assert.match(body, /"plan_step":"p2"/);
+    assert.match(body, /"input":30/);
   });
 
   it('GET / falls back to a JSON health page when ui/dist has no index.html', async () => {

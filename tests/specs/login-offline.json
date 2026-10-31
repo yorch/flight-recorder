@@ -1,0 +1,7 @@
+{
+  "name": "login-offline",
+  "start_url": "https://app.test/login",
+  "goal": "Sign in.",
+  "allowed_origins": ["https://app.test"],
+  "network": "offline"
+}

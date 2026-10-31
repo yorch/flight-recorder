@@ -83,6 +83,123 @@ const readJsonFile = (file: string): unknown => {
   }
 };
 
+const readLines = (file: string): unknown[] => {
+  const out: unknown[] = [];
+  try {
+    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        out.push(JSON.parse(line));
+      } catch {
+        /* partially written trailing line */
+      }
+    }
+  } catch {
+    /* file absent */
+  }
+  return out;
+};
+
+type TimelineEventLike = {
+  type?: string;
+  t_ms?: number;
+  step_id?: string;
+  action?: string;
+  label?: string;
+  plan_step?: string | null;
+  status?: string;
+  error?: string;
+};
+
+/**
+ * §16.3 live progress: everything the harness currently knows about a run,
+ * derived from status.json, plan.json, events.jsonl, agent/transcript.jsonl and
+ * the screenshots directory. The detail API embeds it and the SSE stream emits
+ * it as `progress` events whenever it changes.
+ */
+const computeProgress = (art: string): Record<string, unknown> => {
+  const status = (readJsonFile(path.join(art, 'status.json')) ?? {}) as {
+    phase?: string;
+    plan_step?: string | null;
+    step_id?: string | null;
+  };
+  const plan = readJsonFile(path.join(art, 'plan.json')) as { steps?: { id: string }[] } | undefined;
+
+  const starts = new Map<string, { kind: string; label: string; plan_step: string | null }>();
+  const ends = new Map<string, { status?: string; error?: string }>();
+  let t0: number | null = null;
+  let tEnd: number | null = null;
+  let eventCount = 0;
+  let planStep: string | null = status.plan_step ?? null;
+  let stepId: string | null = status.step_id ?? null;
+  for (const raw of readLines(path.join(art, 'events.jsonl'))) {
+    const e = raw as TimelineEventLike;
+    eventCount += 1;
+    if (e.type === 'RUN_START' && typeof e.t_ms === 'number') t0 = e.t_ms;
+    if (e.type === 'RUN_END' && typeof e.t_ms === 'number') tEnd = e.t_ms;
+    if (e.type === 'ACTION_START' && e.step_id) {
+      starts.set(e.step_id, { kind: e.action ?? '?', label: e.label ?? '', plan_step: e.plan_step ?? null });
+      if (e.plan_step) planStep = e.plan_step;
+      stepId = e.step_id;
+    }
+    if (e.type === 'ACTION_END' && e.step_id) ends.set(e.step_id, { status: e.status, error: e.error });
+  }
+
+  const steps = [...starts.entries()].map(([id, s]) => {
+    const end = ends.get(id);
+    return {
+      step_id: id,
+      kind: s.kind,
+      label: s.label,
+      plan_step: s.plan_step,
+      result: end?.status ? end.status.toLowerCase() : 'running',
+      ...(end?.error ? { error: end.error } : {}),
+    };
+  });
+
+  // A step_done ACTION pair carries the plan step's verdict; the plan step that
+  // owns the latest ACTION_START is 'running'; the rest stay 'open'.
+  const stepVerdict = new Map<string, string>();
+  for (const [id, s] of starts) {
+    if (s.kind === 'step' && s.plan_step && ends.get(id)?.status) stepVerdict.set(s.plan_step, String(ends.get(id)?.status).toLowerCase());
+  }
+  const planSteps = (plan?.steps ?? []).map((s) => ({
+    id: s.id,
+    status: stepVerdict.get(s.id) ?? (s.id === planStep ? 'running' : 'open'),
+  }));
+
+  const tokens = { input: 0, output: 0 };
+  for (const raw of readLines(path.join(art, 'agent', 'transcript.jsonl'))) {
+    const u = (raw as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+    tokens.input += u?.input_tokens ?? 0;
+    tokens.output += u?.output_tokens ?? 0;
+  }
+
+  let latestShot: string | null = null;
+  try {
+    latestShot =
+      fs
+        .readdirSync(path.join(art, 'screenshots'))
+        .filter((f) => /^[A-Za-z0-9._-]+\.png$/i.test(f))
+        .sort()
+        .at(-1) ?? null;
+  } catch {
+    /* no screenshots dir yet */
+  }
+
+  const elapsed = t0 === null ? null : Math.max(0, Math.round(((tEnd ?? Date.now()) - t0) / 1000));
+  return {
+    phase: status.phase ?? null,
+    plan_step: planStep,
+    step_id: stepId,
+    plan_steps: planSteps,
+    steps,
+    latest_screenshot: latestShot,
+    counters: { elapsed_s: elapsed, steps: steps.length, tokens },
+    events: eventCount,
+  };
+};
+
 const atomicWrite = (file: string, text: string): void => {
   const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
   fs.writeFileSync(tmp, text);
@@ -131,6 +248,7 @@ function formFromBody(fields: Record<string, unknown>, assetNames: string[]): Ru
     },
     review_plan: fieldValue(fields.review_plan) === true || fieldValue(fields.review_plan) === 'true',
     approval_timeout_s: fieldValue(fields.approval_timeout_s) as number | undefined,
+    network: fieldValue(fields.network) as RunForm['network'],
     assets: [...new Set([...declared, ...assetNames])],
     stub_script: fieldValue(fields.stub_script),
   };
@@ -241,6 +359,7 @@ export function createApiHandler(deps: ServerDeps) {
       evaluation: readJsonFile(path.join(art, 'evaluation.json')) ?? null,
       report: readJsonFile(path.join(art, 'report.json')) ?? null,
       events,
+      progress: computeProgress(art),
     };
   };
 
@@ -328,6 +447,7 @@ export function createApiHandler(deps: ServerDeps) {
     res.write('retry: 3000\n\n');
     let offset = 0;
     let lastStatus = '';
+    let lastProgress = '';
     let doneSent = false;
     const flush = () => {
       try {
@@ -355,6 +475,15 @@ export function createApiHandler(deps: ServerDeps) {
         }
       } catch {
         /* no status yet */
+      }
+      try {
+        const p = JSON.stringify(computeProgress(art));
+        if (p !== lastProgress) {
+          lastProgress = p;
+          res.write(`event: progress\ndata: ${p}\n\n`);
+        }
+      } catch {
+        /* progress not computable yet */
       }
       if (!doneSent && fs.existsSync(path.join(art, 'run.json'))) {
         flushDone(res, art);

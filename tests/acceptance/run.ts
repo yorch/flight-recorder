@@ -1077,6 +1077,293 @@ const CRITERIA: Criterion[] = [
       return { pass, evidence: ev };
     },
   },
+  {
+    id: 32,
+    title: 'Live progress: detail API/SSE + UI update without reload (§16.3)',
+    run: async () => {
+      const ev: Record<string, unknown> = {};
+      // Same stack as criterion 29: real host runner on 7071 + the ui compose project.
+      fs.mkdirSync('data', { recursive: true });
+      const runner = await spawnReady(
+        ['node', 'src/runner/index.ts'],
+        {
+          RUNNER_BIND: '127.0.0.1:7071',
+          RUNNER_DATA_DIR: path.join(ROOT, 'data'),
+          SECRETS_DIR: path.join(ROOT, 'secrets'),
+          COMPOSE_OVERLAYS: OVERLAY,
+          SITES_LOG_DIR: path.join(ROOT, SITES_LOG),
+        },
+        /RUNNER_LISTENING http:\/\/127\.0\.0\.1:7071/,
+      );
+      const host = { host: '127.0.0.1:7070' };
+      const uiHeaders = { ...host, origin: 'http://127.0.0.1:7070', 'content-type': 'application/json' };
+      const uiGet = async (p: string) =>
+        JSON.parse((await httpCall('GET', 7070, p, host)).body || 'null') as Record<string, unknown> | null;
+      interface Prog {
+        phase?: string | null;
+        plan_steps?: { id: string; status: string }[];
+        steps?: { step_id: string; kind: string; label: string; result: string }[];
+        counters?: { elapsed_s: number | null; steps: number; tokens: { input: number; output: number } };
+        latest_screenshot?: string | null;
+        events?: number;
+      }
+      let pass = false;
+      try {
+        ev.composeUp = sh('docker compose -f docker-compose.ui.yml up -d --build --wait').code;
+        for (let i = 0; i < 60; i++) {
+          try {
+            if ((await httpCall('GET', 7070, '/api/health', host)).code === 200) break;
+          } catch {
+            /* not up yet */
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        ev.health = (await httpCall('GET', 7070, '/api/health', host)).code;
+
+        // A sleep-loop stub run stays 'running' for ~90 s: 25 turns × 3 s sleeps.
+        const stub = fs.readFileSync('tests/stub/sleep-loop.json', 'utf8');
+        const created = await httpCall(
+          'POST',
+          7070,
+          '/api/runs',
+          uiHeaders,
+          JSON.stringify({
+            title: 'live progress check',
+            instructions: 'loop url assertions until done',
+            start_url: 'http://app.test/',
+            model: 'stub',
+            allowed_hosts: ['app.test:80'],
+            stub_script: JSON.parse(stub),
+          }),
+        );
+        ev.create = created.code;
+        const runId = (JSON.parse(created.body || '{}') as { run_id?: string }).run_id ?? '';
+        ev.runId = runId;
+
+        // Collect SSE until 'done': status transitions + progress snapshots.
+        const sse = { phases: new Set<string>(), last: null as Prog | null, progressEvents: 0, sawDone: false };
+        const sseReq = http.request({ host: '127.0.0.1', port: 7070, path: `/api/runs/${runId}/events`, headers: host }, (res) => {
+          let buf = '';
+          res.on('data', (c: Buffer) => {
+            buf += c.toString('utf8');
+            for (;;) {
+              const i = buf.indexOf('\n\n');
+              if (i < 0) break;
+              const chunk = buf.slice(0, i);
+              buf = buf.slice(i + 2);
+              const name = /^event: (\S+)/m.exec(chunk)?.[1] ?? 'message';
+              const data = /^data: (.*)$/m.exec(chunk)?.[1] ?? '';
+              try {
+                if (name === 'status') {
+                  const ph = (JSON.parse(data) as { phase?: string }).phase;
+                  if (ph) sse.phases.add(ph);
+                } else if (name === 'progress') {
+                  sse.last = JSON.parse(data) as Prog;
+                  sse.progressEvents += 1;
+                } else if (name === 'done') {
+                  sse.sawDone = true;
+                }
+              } catch {
+                /* partial frame */
+              }
+            }
+          });
+        });
+        sseReq.on('error', () => {});
+        sseReq.end();
+
+        // Phase transitions via the detail API while the run is live.
+        const apiPhases = new Set<string>();
+        ev.reachedRunning = await waitFor(async () => {
+          const d = (await uiGet(`/api/runs/${runId}`)) as { status?: { phase?: string } } | null;
+          if (d?.status?.phase) apiPhases.add(d.status.phase);
+          return d?.status?.phase === 'running';
+        }, 480_000);
+
+        // The progress payload: plan-step statuses, step log, counters, screenshot.
+        const fetchProgress = async (): Promise<Prog | null> => {
+          const d = (await uiGet(`/api/runs/${runId}`)) as { progress?: Prog } | null;
+          return d?.progress ?? null;
+        };
+        let prog: Prog | null = null;
+        ev.progressReady = await waitFor(async () => {
+          prog = await fetchProgress();
+          return (prog?.steps?.length ?? 0) >= 2 && prog?.latest_screenshot != null;
+        }, 240_000);
+        prog ??= await fetchProgress();
+        const stepsHaveFields =
+          (prog?.steps?.length ?? 0) > 0 &&
+          (prog?.steps ?? []).every(
+            (s) => Boolean(s.step_id) && Boolean(s.kind) && typeof s.label === 'string' && typeof s.result === 'string',
+          );
+        ev.apiProgress = prog
+          ? {
+              phase: prog.phase,
+              planStepStatuses: prog.plan_steps,
+              stepCount: prog.counters?.steps,
+              tokens: prog.counters?.tokens,
+              elapsed_s: prog.counters?.elapsed_s,
+              latestScreenshot: prog.latest_screenshot,
+              sampleSteps: prog.steps?.slice(0, 3),
+              fieldsOk: stepsHaveFields,
+            }
+          : null;
+
+        // The screenshot list grows while the run is live.
+        const shots1 = (((await uiGet(`/api/runs/${runId}/screenshots`)) as { screenshots?: string[] } | null)?.screenshots ?? []).length;
+        ev.shotsGrew = await waitFor(async () => {
+          const n = (((await uiGet(`/api/runs/${runId}/screenshots`)) as { screenshots?: string[] } | null)?.screenshots ?? []).length;
+          return n > shots1;
+        }, 120_000);
+
+        // UI: the dockerized driver asserts the live view renders and updates
+        // without a reload while the run is still running.
+        ev.e2eBuild = sh('docker build -f docker/e2e/Dockerfile -t browser-agent-e2e .').code;
+        const e2e = sh(
+          `docker run --rm --add-host host.docker.internal:host-gateway -e E2E_RUN_ID=${runId} --entrypoint node browser-agent-e2e /e2e/live-progress-e2e.mjs`,
+        );
+        ev.e2eExit = e2e.code;
+        const m = /E2E_RESULT (.*)/.exec(e2e.out);
+        ev.e2e = m ? (JSON.parse(m[1]) as Record<string, unknown>) : { tail: e2e.out.slice(-800) };
+
+        // Cancel the sleeper; the SSE stream then ends with 'done'.
+        ev.cancel = (await httpCall('POST', 7070, `/api/runs/${runId}/cancel`, uiHeaders, '{}')).code;
+        ev.streamEnded = await waitFor(() => Promise.resolve(sse.sawDone), 300_000);
+        sseReq.destroy();
+        ev.sse = { progressEvents: sse.progressEvents, lastSteps: sse.last?.steps?.length, lastPhase: sse.last?.phase };
+        const allPhases = [...new Set([...sse.phases, ...apiPhases])];
+        ev.phases = allPhases;
+        pass =
+          ev.composeUp === 0 &&
+          ev.health === 200 &&
+          ev.create === 201 &&
+          ev.reachedRunning === true &&
+          ev.progressReady === true &&
+          stepsHaveFields &&
+          (prog?.plan_steps?.length ?? 0) >= 1 &&
+          (prog?.plan_steps ?? []).every((s) => typeof s.status === 'string') &&
+          typeof prog?.counters?.steps === 'number' &&
+          typeof prog?.counters?.tokens?.input === 'number' &&
+          typeof prog?.counters?.tokens?.output === 'number' &&
+          typeof prog?.latest_screenshot === 'string' &&
+          ev.shotsGrew === true &&
+          ev.e2eExit === 0 &&
+          (ev.e2e as { ok?: boolean }).ok === true &&
+          sse.progressEvents >= 1 &&
+          allPhases.includes('running') &&
+          allPhases.length >= 2;
+      } finally {
+        ev.composeDown = sh('docker compose -f docker-compose.ui.yml down -v').code;
+        await stopProc(runner);
+      }
+      pass = pass && ev.composeDown === 0;
+      return { pass, evidence: ev };
+    },
+  },
+  {
+    id: 31,
+    title: 'Network presets: full reaches fixture; limited/offline deny on 3128; agent rules unchanged (§2.4)',
+    run: async () => {
+      const ev: Record<string, unknown> = {};
+      // Render squid.conf per preset with the proxy image (same trick as criterion 21).
+      ev.proxyBuild = sh(`${compose} build proxy`, diagEnv).code;
+      const genConf = (vol: string, testFile: string) =>
+        sh(
+          `docker run --rm -v ${vol} -e TEST_FILE=${testFile} -e AGENT_EGRESS_HOSTS=llm.test:80 --entrypoint sh acc-diag-proxy -c 'sed "s|exec squid.*||; s|CONF=/etc/squid/squid.conf|CONF=/tmp/s.conf|; s|LOG=/var/log/squid-pair|LOG=/tmp|" /usr/local/bin/gen-squid-conf > /tmp/g.sh && sh /tmp/g.sh; echo GENC_RC=$?; cat /tmp/s.conf 2>/dev/null'`,
+        ).out;
+      const testsVol = '"$PWD/tests:/tests:ro"';
+      const confLimited = genConf(testsVol, '/tests/specs/probe.json');
+      const confFull = genConf(testsVol, '/tests/specs/probe-full.json');
+      const confOffline = genConf(testsVol, '/tests/specs/login-offline.json');
+      // An unexpected network value conservatively behaves as limited.
+      const bogusDir = fs.mkdtempSync('/tmp/acc-net-');
+      fs.writeFileSync(
+        path.join(bogusDir, 'bogus.json'),
+        JSON.stringify({ ...JSON.parse(fs.readFileSync('tests/specs/probe.json', 'utf8')), network: 'banana' }),
+      );
+      const confBogus = genConf(`"${bogusDir}:/tspecs:ro"`, '/tspecs/bogus.json');
+
+      const confBody = (out: string) => out.slice(out.indexOf('http_port'));
+      const catchAll = (c: string) => /^http_access allow browser_port$/m.test(c);
+      const bRules = (c: string) => c.split('\n').filter((l) => /^acl b\d+_|^http_access allow browser_port b\d+_/.test(l));
+      const agentRules = (c: string) => c.split('\n').filter((l) => /\bg\d+_(host|port)\b|agent_port/.test(l));
+      const agentRulesIdentical =
+        JSON.stringify(agentRules(confLimited)) === JSON.stringify(agentRules(confFull)) &&
+        JSON.stringify(agentRules(confLimited)) === JSON.stringify(agentRules(confOffline));
+      const bogusEqualsLimited = confBody(confBogus) === confBody(confLimited);
+
+      // real run, network:'full' — the probe's evil.test requests reach the fixture.
+      const beforeFull = siteLog().length;
+      const rFull = runTest('specs/probe-full.json', 'probe.json', { AGENT_EGRESS_HOSTS: 'llm.test:80' });
+      const afterFull = siteLog().slice(beforeFull);
+      const evilArrived = afterFull.filter((l) => String(l.host_header ?? '').split(':')[0] === 'evil.test');
+      const probeBody = afterFull
+        .map((l) => {
+          try {
+            return JSON.parse(l.body ?? '{}') as { kind?: string; results?: Record<string, { ok?: boolean }> };
+          } catch {
+            return {};
+          }
+        })
+        .find((b) => b.kind === 'probe');
+
+      // real run, network:'offline' — even an allowed host is denied, so s0000 fails.
+      const beforeOff = siteLog().length;
+      const rOff = runTest('specs/login-offline.json', 'login.json');
+      const jOff = runJson(rOff.dir);
+      const s0000 = eventsOf(rOff.dir).find((e) => e.type === 'ACTION_END' && e.step_id === 's0000');
+      const accLog = fs.readFileSync(`${rOff.dir}/logs/proxy-access.log`, 'utf8');
+      // proto 'server' entries are the fixture's own lifecycle lines, not requests.
+      const reachedOff = siteLog()
+        .slice(beforeOff)
+        .filter((l) => l.proto !== 'server');
+
+      ev.conf = {
+        limited: { catchAll: catchAll(confLimited), bRules: bRules(confLimited).length },
+        full: { catchAll: catchAll(confFull), bRules: bRules(confFull).length },
+        offline: { allowBrowserLines: (confOffline.match(/http_access allow browser_port/g) ?? []).length },
+        agentRulesIdentical,
+        bogusEqualsLimited,
+      };
+      ev.full = {
+        code: rFull.code,
+        evilArrived: evilArrived.map((l) => `${l.host_header}${l.path}`),
+        // fetch() still rejects at JS level (no ACAO header on the fixture), but the
+        // request arrived — proven by ground truth; img/ws/no-cors post complete.
+        fetchEvilOk: probeBody?.results?.fetch_evil?.ok,
+        imgEvilOk: probeBody?.results?.img_evil?.ok,
+        wsEvilOk: probeBody?.results?.ws_evil?.ok,
+      };
+      ev.offline = {
+        code: rOff.code,
+        status: jOff.status,
+        s0000: s0000?.status,
+        denied: jOff.egress?.denied,
+        siteRequests: reachedOff.length,
+      };
+      const pass =
+        ev.proxyBuild === 0 &&
+        [confLimited, confFull, confOffline, confBogus].every((c) => c.includes('GENC_RC=0') && c.includes('http_access deny all')) &&
+        catchAll(confFull) &&
+        bRules(confFull).length === 0 &&
+        !catchAll(confLimited) &&
+        bRules(confLimited).length > 0 &&
+        !/http_access allow browser_port/.test(confOffline) &&
+        bRules(confOffline).length === 0 &&
+        agentRulesIdentical &&
+        bogusEqualsLimited &&
+        (rFull.code === 0 || rFull.code === 3) &&
+        evilArrived.some((l) => /k=fetch/.test(l.path ?? '')) &&
+        probeBody?.results?.img_evil?.ok === true &&
+        rOff.code === 2 &&
+        jOff.status === 'FAILED' &&
+        s0000?.status === 'FAILED' &&
+        /CONNECT app\.test:443/.test(accLog) &&
+        (jOff.egress?.denied ?? []).some((d: { host: string }) => d.host === 'app.test:443') &&
+        reachedOff.length === 0;
+      return { pass, evidence: ev };
+    },
+  },
 ];
 
 for (const c of CRITERIA) {

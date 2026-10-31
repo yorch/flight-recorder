@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Gallery } from '../components/Gallery.tsx';
+import { LiveProgress } from '../components/LiveProgress.tsx';
 import { PlanPanel } from '../components/PlanPanel.tsx';
 import { ReportPanel } from '../components/ReportPanel.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
@@ -10,6 +11,7 @@ import {
   apiPost,
   artifactUrl,
   type ChaptersFile,
+  type LiveProgress as LiveProgressData,
   type Plan,
   type RunDetail,
   type RunJson,
@@ -39,6 +41,7 @@ export function RunDetailPage({ id }: { id: string }) {
   const [liveStatus, setLiveStatus] = useState<StatusInfo | null>(null);
   const [liveRun, setLiveRun] = useState<RunJson | null>(null);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [progress, setProgress] = useState<LiveProgressData | null>(null);
   const [shots, setShots] = useState<string[]>([]);
   const [chapters, setChapters] = useState<ChaptersFile | null>(null);
   const [sseState, setSseState] = useState<'open' | 'closed'>('closed');
@@ -48,6 +51,7 @@ export function RunDetailPage({ id }: { id: string }) {
     try {
       const d = await apiGet<RunDetail>(`/api/runs/${id}`);
       setDetail(d);
+      if (d.progress) setProgress(d.progress);
       setError(null);
       return d;
     } catch (err) {
@@ -142,6 +146,13 @@ export function RunDetailPage({ id }: { id: string }) {
         /* partial write */
       }
     });
+    es.addEventListener('progress', (m) => {
+      try {
+        setProgress(JSON.parse((m as MessageEvent).data as string) as LiveProgressData);
+      } catch {
+        /* partial write */
+      }
+    });
     es.addEventListener('done', (m) => {
       try {
         setLiveRun(JSON.parse((m as MessageEvent).data as string) as RunJson);
@@ -190,7 +201,8 @@ export function RunDetailPage({ id }: { id: string }) {
     }
   };
 
-  const latestShot = shots.at(-1) ?? null;
+  const latestShot = shots.at(-1) ?? progress?.latest_screenshot ?? null;
+  const currentPlanStep = progress?.plan_step ?? liveStatus?.plan_step ?? detail?.status?.plan_step ?? null;
   const awaiting = phase === 'awaiting_approval';
   const report = detail?.report ?? null;
   const egress = run?.egress ?? report?.egress ?? null;
@@ -226,8 +238,7 @@ export function RunDetailPage({ id }: { id: string }) {
       )}
       <div className="meta mono">
         <StatusBadge status={statusText} /> <span data-testid="phase">{badge.text}</span> · run <span>{id}</span>
-        {detail?.status?.plan_step && <span> · step {detail.status.plan_step}</span>}
-        {liveStatus?.plan_step && liveStatus.plan_step !== detail?.status?.plan_step && <span> · step {liveStatus.plan_step}</span>}
+        {currentPlanStep && <span> · step {currentPlanStep}</span>}
         {detail?.spec && typeof (detail.spec as { model?: string }).model === 'string' ? '' : ''}
         <span> · {terminal ? 'Evidence collected' : sseState === 'open' ? 'Live updates connected' : 'Connecting to live updates'}</span>
       </div>
@@ -253,6 +264,7 @@ export function RunDetailPage({ id }: { id: string }) {
           </a>
         ))}
       </nav>
+      {!terminal && <LiveProgress progress={progress} fallbackPhase={phase} />}
       <div className="cols">
         <div>
           <div id="section-overview">
@@ -272,7 +284,7 @@ export function RunDetailPage({ id }: { id: string }) {
             <section className="panel" data-testid="live-shot">
               <div className="row spread">
                 <h3>Live browser</h3>
-                <span className="chip chip-running">{liveStatus?.plan_step ?? detail?.status?.plan_step ?? badge.text}</span>
+                <span className="chip chip-running">{currentPlanStep ?? badge.text}</span>
               </div>
               <img src={artifactUrl(id, `screenshots/${latestShot}`)} alt="latest observation" className="live-img" />
             </section>
@@ -281,7 +293,8 @@ export function RunDetailPage({ id }: { id: string }) {
             <PlanPanel
               plan={detail?.plan ?? null}
               reportSteps={report?.plan?.steps}
-              currentStep={liveStatus?.plan_step ?? detail?.status?.plan_step ?? null}
+              liveSteps={progress?.plan_steps}
+              currentStep={currentPlanStep}
               editable={awaiting}
               onApprove={onApprove}
               onReject={onReject}
@@ -296,7 +309,7 @@ export function RunDetailPage({ id }: { id: string }) {
         </div>
         <div>
           <div id="section-activity">
-            <Timeline events={events} />
+            <Timeline events={events} maxRows={terminal ? undefined : 25} />
           </div>
           {egress && (
             <section className="panel">

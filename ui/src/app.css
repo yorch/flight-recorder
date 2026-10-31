@@ -935,6 +935,37 @@
 :where(.skip-link:focus) {
   top: 10px;
 }
+
+/* §16.3 live progress panel (non-terminal runs, driven by SSE progress events). */
+:where(.live-counters) {
+  display: flex;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  margin: var(--space-4) 0 var(--space-3);
+}
+:where(.live-counters > div span) {
+  display: block;
+  color: var(--muted);
+  font-size: var(--type-xs);
+}
+:where(.live-counters > div strong) {
+  display: block;
+  font-size: 1.35rem;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+:where(.plan-step-statuses) {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-3) 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  font-size: var(--type-sm);
+}
+:where(.step-log) {
+  max-height: 340px;
+}
 @media (max-width: 900px) {
   :where(main) {
     padding: 0 16px 40px;

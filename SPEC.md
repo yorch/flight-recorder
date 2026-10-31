@@ -343,6 +343,8 @@ jq -r '
      | if test(":") then . else . + ":443" end)
 ' "$TEST_FILE" > /tmp/browser-hosts
 printf '%s\n' "$AGENT_EGRESS_HOSTS" | tr ',' '\n' | sed '/^$/d; /:/!s/$/:443/' > /tmp/agent-hosts
+# Browser egress preset (§2.4); an unexpected value conservatively falls back to the allowlist.
+NETWORK="$(jq -r '.network // "limited"' "$TEST_FILE")"
 
 rules() { # $1 = acl prefix, $2 = listening-port acl, $3 = file of host:port lines
   i=0
@@ -361,7 +363,11 @@ rules() { # $1 = acl prefix, $2 = listening-port acl, $3 = file of host:port lin
 {
   printf 'http_port 3128 name=browser\nhttp_port 3129 name=agent\n'
   printf 'acl browser_port myportname browser\nacl agent_port myportname agent\n'
-  rules b browser_port /tmp/browser-hosts
+  case "$NETWORK" in
+    full) printf 'http_access allow browser_port\n' ;;
+    offline) : ;; # no allow rules on 3128: every browser request hits "deny all"
+    *) rules b browser_port /tmp/browser-hosts ;;
+  esac
   rules g agent_port /tmp/agent-hosts
   cat <<EOF
 http_access deny all
@@ -400,6 +406,7 @@ Rules and properties (all verified in the proxy spike, §13.2):
 - **HTTPS stays end-to-end encrypted.** HTTPS and WebSocket traffic is filtered on the `CONNECT host:port` line, without TLS interception.
 - **No DNS for denied hosts.** Squid resolves only allowed hosts. The run pair itself has no DNS beyond container names, because Docker's embedded resolver does not forward queries from `internal` networks.
 - **WebRTC/UDP has nowhere to go.** The `sandbox` network has no route out, so ICE gathering produced no candidates and no datagrams left the network.
+- **Egress presets.** `spec.network` changes the browser port's rules: `full` allows every host:port through the proxy (still the only route out; nothing bypasses it), `limited` (default) uses the TestSpec allowlists, `offline` denies every request on the browser port. The agent port 3129 is unaffected — the model API always keeps its allowlist.
 - **Corporate proxies.** `UPSTREAM_PROXY=host:port` chains every allowed request through a parent proxy (`cache_peer` + `never_direct`). `UPSTREAM_BYPASS` is a comma-separated list of hostnames that always go direct, such as internal test sites the parent can't reach. It is validated like the other entries. Verified: with a parent set, fixture hosts logged `HIER_DIRECT` and the model API call logged `FIRSTUP_PARENT`.
 - **Logging.** One line per request (`<epoch> <client> <listen addr:port> <method> <url> <status> <squid result>`), written to the `proxy-logs` volume. The orchestrator collects it after the run (§6.6). `umask 022` is required: Squid's default `027` makes the log unreadable to the orchestrator's `node` user (found during the build).
 
@@ -1638,6 +1645,7 @@ A run can be requested with plain instructions, for example: "Go to the blog adm
   assets?: string[];            // file names available for upload, resolved under <dirname(TEST_FILE)>/assets (e.g. /run-input/assets)
   review_plan?: boolean;        // pause for approval after planning (default false)
   approval_timeout_s?: number;  // default 1800; no approval in time ends the run CANCELLED
+  network?: 'full' | 'limited' | 'offline'; // browser egress preset (default 'limited')
 ```
 
 `allowed_origins` defaults to `[origin(start_url)]` when it is omitted.
@@ -1754,8 +1762,8 @@ Node 26 with `node:http`. It serves the built SPA and a JSON API.
 |---|---|
 | `GET /api/runs` | All runs, newest first, with steps and token counts. Status is merged from `request.json`, the runner state, `status.json` and `run.json`. |
 | `POST /api/runs` | Create a run from the form: title, instructions, start URL, model, credentials, extra hosts/origins, budgets, `review_plan`, assets, and an optional `stub_script` (saved to `stub/script.json` for stub runs). Uploads are `multipart/form-data`, at most 20 files of up to 25 MB each, with names sanitised to `[A-Za-z0-9._-]`. Writes the request dir, then calls the runner. |
-| `GET /api/runs/:id` | Request, spec, runner state, `status.json`, `run.json`, plan, evaluation, report and an events summary. |
-| `GET /api/runs/:id/events` | Server-sent events: tail of `events.jsonl` plus `status.json` changes (`retry: 3000`; the stream ends with a `done` event carrying `run.json`). |
+| `GET /api/runs/:id` | Request, spec, runner state, `status.json`, `run.json`, plan, evaluation, report, an events summary and a `progress` snapshot. |
+| `GET /api/runs/:id/events` | Server-sent events: tail of `events.jsonl` plus `status.json` changes and `progress` snapshots (`retry: 3000`; the stream ends with a `done` event carrying `run.json`). |
 | `GET /api/runs/:id/screenshots` | Screenshot file names (for the live view and gallery). |
 | `POST /api/runs/:id/approve` | `{ plan? }`; writes `control/approval.json`. |
 | `POST /api/runs/:id/reject` | Writes a reject decision. |
@@ -1778,7 +1786,8 @@ Node 26 with `node:http`. It serves the built SPA and a JSON API.
 ### 16.3 Web UI (`ui/`, React + Vite + TypeScript)
 
 - **Runs list:** status badges (queued, planning, awaiting approval, running, evaluating, passed, failed, unverified, cancelled), title, model, created, duration, steps and tokens. Filterable, auto-refreshing.
-- **New run:** the form from §16.2. "Review plan before executing" is off by default.
+- **New run:** the form from §16.2, including the `network` egress preset. "Review plan before executing" is off by default.
+- **Live progress:** while a run is non-terminal the detail view shows everything the harness knows, updating over SSE: the current phase and plan step, each plan step's status, the rolling agent step log (step id, action kind, label, result), the latest observation screenshot, a compact event timeline, and counters (elapsed time, steps, model tokens). The `progress` snapshot — `{ phase, plan_step, step_id, plan_steps, steps, latest_screenshot, counters: { elapsed_s, steps, tokens }, events }` — is derived from `status.json`, `plan.json`, `events.jsonl`, `agent/transcript.jsonl` (model token usage) and the screenshots directory.
 - **Run detail:**
   - live phase and current plan step via SSE, with the latest screenshot;
   - the plan, with per-step status; while `awaiting_approval` it is editable, with Approve and Reject buttons;
@@ -1817,3 +1826,5 @@ Node 26 with `node:http`. It serves the built SPA and a JSON API.
     - Open the finished run: the verdict and conclusions render, the video loads with a chapter list, a chapter click seeks the player, and the screenshots render.
     - Cancel and Rerun work.
 30. **Live smoke (real model):** the blog scenario submitted through the UI with `anthropic/claude-opus-5-5` ends `PASSED`, and its report has a non-empty plan, conclusions, video and screenshots.
+31. **Network presets:** with `network: "full"`, a page fetch to a host absent from the allowlists reaches the fixture. With `network: "limited"` (default) the same fetch is denied. With `network: "offline"` even an allowed host is denied and the page shows a proxy error, while orchestrator→model traffic still arrives on port 3129.
+32. **Live progress:** during a running test the detail API and the UI expose, without a reload: phase transitions, per-plan-step statuses, the agent step log so far, the latest screenshot, the event timeline and step/token counters.

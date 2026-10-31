@@ -1,0 +1,8 @@
+{
+  "name": "probe-full",
+  "start_url": "http://app.test/probe",
+  "goal": "Wait for the probe page to finish.",
+  "allowed_origins": ["http://app.test"],
+  "allowed_hosts": ["*.app.test:80"],
+  "network": "full"
+}

@@ -45,6 +45,7 @@ export const TestSpecSchema = z.object({
   assets: z.array(z.string().min(1)).max(20).optional(),
   review_plan: z.boolean().optional(),
   approval_timeout_s: z.number().positive().optional(),
+  network: z.enum(['full', 'limited', 'offline']).optional(),
   max_steps: z.number().int().positive().optional(),
   timeout_s: z.number().positive().optional(),
   max_model_tokens: z.number().int().positive().optional(),

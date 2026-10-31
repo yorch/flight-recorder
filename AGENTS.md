@@ -16,7 +16,7 @@ An AI-agent-driven browser testing platform.
 |---|---|
 | SPEC §0–§14 (core harness) | Implemented. Acceptance suite criteria 1–21 green. |
 | SPEC §15 (NL runs: plan → execute → evaluate → report) | Implemented: `structured()` model calls, planner + approval gate, plan-aware actions (`plan_step`, `criterion`, `step_done`, `upload`, `assert_url`), finish nudge, evaluator, §15.5 verdict + `CANCELLED` (exit 4), `status.json`, `report.{json,md,html}`. Criteria 22–26 green. |
-| SPEC §16 (runner daemon, control-plane API, React UI) | Implemented: `npm run runner` (host, token auth, queue, docker execFile), `src/server/` control plane (`docker-compose.ui.yml`, 127.0.0.1:7070), `ui/` React+Vite SPA. Criteria 27–29 green. |
+| SPEC §16 (runner daemon, control-plane API, React UI) | Implemented: `npm run runner` (host, token auth, queue, docker execFile), `src/server/` control plane (`docker-compose.ui.yml`, 127.0.0.1:7070), `ui/` React+Vite SPA, live progress via a derived `progress` snapshot (detail API field + SSE `progress` event). Criteria 27–29 and 32 green. |
 | Live smoke, Anthropic (`anthropic/claude-opus-5-5`) | PASSED login spec and the full NL blog scenario through the UI (run `20261031-002333-6657`: 25 steps, all criteria MET, finish nudge fired once). |
 | Live smoke, OpenAI (`openai/gpt-6-astra`) | **Blocked by the key, not the code**: OpenAI returns 401 "Missing scopes: api.responses.write". The user must grant that scope or replace `./secrets/OPENAI_API_KEY`. |
 

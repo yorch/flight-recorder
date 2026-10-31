@@ -22,6 +22,7 @@ export interface RunForm {
   budgets?: { max_steps?: number; timeout_s?: number; max_model_tokens?: number };
   review_plan?: boolean;
   approval_timeout_s?: number;
+  network?: 'full' | 'limited' | 'offline'; // §15.1 browser egress preset (default 'limited')
   assets?: string[];
   stub_script?: unknown; // stub provider: script object (or JSON text) written to stub/script.json
 }
@@ -118,6 +119,7 @@ export function buildSpec(form: RunForm): TestSpec {
   if (assets.length > 0) raw.assets = assets;
   if (form.review_plan) raw.review_plan = true;
   if (form.approval_timeout_s !== undefined) raw.approval_timeout_s = form.approval_timeout_s;
+  if (form.network !== undefined) raw.network = form.network;
   if (form.budgets?.max_steps !== undefined) raw.max_steps = form.budgets.max_steps;
   if (form.budgets?.timeout_s !== undefined) raw.timeout_s = form.budgets.timeout_s;
   if (form.budgets?.max_model_tokens !== undefined) raw.max_model_tokens = form.budgets.max_model_tokens;

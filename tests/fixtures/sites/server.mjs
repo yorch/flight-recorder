@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import dgram from 'node:dgram';
 import fs from 'node:fs';
 import http from 'node:http';
+import { enrichPost, layout, productRoutes } from './product.mjs';
 
 const LOG = process.env.LOG_FILE || '/var/log/sites/requests.jsonl';
 fs.mkdirSync(new URL(`file://${LOG}/..`).pathname, { recursive: true });
@@ -11,7 +12,10 @@ const rec = (e) => log.write(`${JSON.stringify({ t_ms: Date.now(), ...e })}\n`);
 const EMAIL = process.env.SITE_EMAIL || 'agent@example.test';
 const PASSWORD = process.env.SITE_PASSWORD || 's3cret-test-pw';
 
-const page = (t, b) => `<!doctype html><html><head><title>${t}</title></head><body>${b}</body></html>`;
+const page = (t, b) =>
+  ['Blog admin', 'Admin posts', 'New post', 'Sign in', 'Dashboard', 'Blog'].includes(t)
+    ? layout(t, b)
+    : `<!doctype html><html><head><title>${t}</title></head><body>${b}</body></html>`;
 
 const PAGES = {
   'admin/login': page(
@@ -30,6 +34,7 @@ const PAGES = {
     <form id="f">
       <label>Title <input id="t" name="title" type="text"></label><br>
       <label>Body <textarea id="b" name="body"></textarea></label><br>
+      <label>Tags <input id="tags" name="tags" value="Journal"></label>
       <button type="button" id="choose">Choose image</button>
       <input id="file" type="file" accept="image/*" hidden>
       <span id="fname"></span><br>
@@ -45,11 +50,13 @@ const PAGES = {
         const fd = new FormData();
         fd.append('title', document.getElementById('t').value);
         fd.append('body', document.getElementById('b').value);
+        fd.append('tags', document.getElementById('tags').value);
         if (document.getElementById('pub').checked) fd.append('published', '1');
         if (f.files[0]) fd.append('image', f.files[0]);
         const r = await fetch('/admin/posts', { method: 'POST', body: fd });
-        if (r.redirected) location.href = r.url;
+        if (r.redirected) { sessionStorage.setItem('bloghub_notice', 'Post saved'); location.href = r.url; }
       };
+      document.getElementById('f').onsubmit = event => { event.preventDefault(); document.getElementById('save').click(); };
     </script>`,
   ),
   login: page(
@@ -184,8 +191,11 @@ function handle(req, res) {
         const file = parts.image;
         // latin1 data keeps bytes exact
         const sha = file ? crypto.createHash('sha256').update(file.data).digest('hex') : null;
+        const baseSlug = slugify(String(parts.title ?? 'post'));
+        let suffix = posts.length;
+        while (posts.some((entry) => entry.slug === `${baseSlug}-${suffix}`)) suffix++;
         const post = {
-          slug: `${slugify(String(parts.title ?? 'post'))}-${posts.length}`,
+          slug: `${baseSlug}-${suffix}`,
           title: String(parts.title ?? ''),
           body: String(parts.body ?? ''),
           published: parts.published !== undefined,
@@ -193,6 +203,11 @@ function handle(req, res) {
           sha256: sha,
           size: file ? file.data.length : 0,
         };
+        enrichPost(post);
+        post.tags = String(parts.tags || 'Journal')
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean);
         posts.push(post);
         rec({
           proto: 'server',
@@ -202,10 +217,13 @@ function handle(req, res) {
           published: post.published,
           upload_sha256: sha,
           upload_size: post.size,
+          created_at: post.created_at,
+          tags: post.tags,
         });
         res.writeHead(303, { location: '/blog' }).end();
         return;
       }
+      if (productRoutes(req, res, u, posts, rec, body)) return;
       if (p === '/login') {
         const q = new URLSearchParams(body);
         res
@@ -247,6 +265,7 @@ function handle(req, res) {
     res.writeHead(200, { 'content-type': 'text/html' }).end(PAGES.form);
     return;
   }
+  if (productRoutes(req, res, u, posts, rec)) return;
   if (p === '/admin/posts') {
     const rows = posts
       .map(

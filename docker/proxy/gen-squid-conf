@@ -15,6 +15,8 @@ jq -r '
      | if test(":") then . else . + ":443" end)
 ' "$TEST_FILE" > /tmp/browser-hosts
 printf '%s\n' "$AGENT_EGRESS_HOSTS" | tr ',' '\n' | sed '/^$/d; /:/!s/$/:443/' > /tmp/agent-hosts
+# Browser egress preset (§2.4); an unexpected value conservatively falls back to the allowlist.
+NETWORK="$(jq -r '.network // "limited"' "$TEST_FILE")"
 
 rules() { # $1 = acl prefix, $2 = listening-port acl, $3 = file of host:port lines
   i=0
@@ -33,7 +35,11 @@ rules() { # $1 = acl prefix, $2 = listening-port acl, $3 = file of host:port lin
 {
   printf 'http_port 3128 name=browser\nhttp_port 3129 name=agent\n'
   printf 'acl browser_port myportname browser\nacl agent_port myportname agent\n'
-  rules b browser_port /tmp/browser-hosts
+  case "$NETWORK" in
+    full) printf 'http_access allow browser_port\n' ;;
+    offline) : ;; # no allow rules on 3128: every browser request hits "deny all"
+    *) rules b browser_port /tmp/browser-hosts ;;
+  esac
   rules g agent_port /tmp/agent-hosts
   cat <<EOF
 http_access deny all

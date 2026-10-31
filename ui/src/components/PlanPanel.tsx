@@ -5,6 +5,7 @@ import { emptyPlan, planChanges, planProblems, renumber } from '../lib/planEdit.
 interface Props {
   plan: Plan | null;
   reportSteps?: ReportStep[];
+  liveSteps?: { id: string; status: string }[]; // per-plan-step statuses while running
   currentStep?: string | null; // status.json plan_step while running
   editable: boolean;
   onApprove: (plan: Plan) => Promise<void>;
@@ -12,13 +13,14 @@ interface Props {
 }
 
 /** §16.3 plan view: per-step status; editable while awaiting_approval. */
-export function PlanPanel({ plan, reportSteps, currentStep, editable, onApprove, onReject }: Props) {
+export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable, onApprove, onReject }: Props) {
   const [draft, setDraft] = useState<Plan | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const base = draft ?? plan ?? emptyPlan();
   const outcome = new Map((reportSteps ?? []).map((s) => [s.id, s]));
+  const live = new Map((liveSteps ?? []).map((s) => [s.id, s.status]));
   const problems = useMemo(() => planProblems(base), [base]);
   const changes = useMemo(() => (plan ? planChanges(plan, base) : []), [plan, base]);
 
@@ -73,7 +75,7 @@ export function PlanPanel({ plan, reportSteps, currentStep, editable, onApprove,
           </thead>
           <tbody>
             {base.steps.map((s, i) => {
-              const st = outcome.get(s.id)?.outcome ?? (currentStep === s.id ? 'running' : 'open');
+              const st = outcome.get(s.id)?.outcome ?? live.get(s.id) ?? (currentStep === s.id ? 'running' : 'open');
               return (
                 <tr key={s.id} className={currentStep === s.id ? 'current' : ''}>
                   <td className="mono">{s.id}</td>

@@ -8,6 +8,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm init -y >/dev/null && npm install playwright@1.64.1
 
 COPY tests/acceptance/tools/ui-e2e.mjs ./ui-e2e.mjs
+COPY tests/acceptance/tools/live-progress-e2e.mjs ./live-progress-e2e.mjs
 
 USER pwuser
 ENTRYPOINT ["node", "/e2e/ui-e2e.mjs"]

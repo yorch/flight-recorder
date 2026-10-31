@@ -112,6 +112,26 @@ export interface Report {
   artifacts: { video: string; raw_video: string; chapters_vtt: string; screenshots: string[] };
 }
 
+/** §16.3 live progress snapshot (detail API field + SSE `progress` event). */
+export interface LiveStepEntry {
+  step_id: string;
+  kind: string;
+  label: string;
+  plan_step: string | null;
+  result: 'running' | 'passed' | 'failed' | string;
+  error?: string;
+}
+export interface LiveProgress {
+  phase: string | null;
+  plan_step: string | null;
+  step_id: string | null;
+  plan_steps: { id: string; status: string }[];
+  steps: LiveStepEntry[];
+  latest_screenshot: string | null;
+  counters: { elapsed_s: number | null; steps: number; tokens: { input: number; output: number } };
+  events: number;
+}
+
 export interface RunDetail {
   run_id: string;
   request: Record<string, unknown> | null;
@@ -123,6 +143,7 @@ export interface RunDetail {
   evaluation: Evaluation | null;
   report: Report | null;
   events: { count: number; tail: unknown[] };
+  progress: LiveProgress | null;
 }
 
 export interface Chapter {

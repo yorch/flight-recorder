@@ -4,6 +4,13 @@ import { nav } from '../lib/router.ts';
 
 const INPUT_TYPES = ['password', 'email', 'text'] as const;
 
+const NETWORK_HINTS = {
+  limited: 'Limited (default): the browser reaches only the allowed origins and hosts through the proxy.',
+  full: 'Full: all sites are reachable, still only through the proxy — nothing bypasses it.',
+  offline: 'Offline: no browser egress; every request is denied at the proxy.',
+} as const;
+type NetworkPreset = keyof typeof NETWORK_HINTS;
+
 interface CredSel {
   name: string;
   enabled: boolean;
@@ -22,6 +29,7 @@ export function NewRun() {
   const [origins, setOrigins] = useState('');
   const [maxSteps, setMaxSteps] = useState('');
   const [timeoutS, setTimeoutS] = useState('');
+  const [network, setNetwork] = useState<NetworkPreset>('limited');
   const [reviewPlan, setReviewPlan] = useState(false);
   const [stubScript, setStubScript] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
@@ -71,6 +79,7 @@ export function NewRun() {
       if (maxSteps.trim()) fd.set('max_steps', maxSteps.trim());
       if (timeoutS.trim()) fd.set('timeout_s', timeoutS.trim());
       if (reviewPlan) fd.set('review_plan', 'true');
+      fd.set('network', network);
       const chosen = creds.filter((c) => c.enabled);
       if (chosen.length) fd.set('credentials', JSON.stringify(chosen.map((c) => ({ name: c.name, input_types: [...c.input_types] }))));
       if (isStub && stubScript.trim()) fd.set('stub_script', stubScript);
@@ -204,6 +213,15 @@ export function NewRun() {
               <label htmlFor="f-origins">Extra allowed origins</label>
               <input id="f-origins" value={origins} onChange={(e) => setOrigins(e.target.value)} placeholder="https://app.example" />
             </div>
+          </div>
+          <div className="field">
+            <label htmlFor="f-network">Network access</label>
+            <select id="f-network" value={network} onChange={(e) => setNetwork(e.target.value as NetworkPreset)}>
+              <option value="limited">Limited — allowlist (default)</option>
+              <option value="full">Full — all sites via proxy</option>
+              <option value="offline">Offline — no browser egress</option>
+            </select>
+            <p className="muted small">{NETWORK_HINTS[network]}</p>
           </div>
         </fieldset>
         <fieldset>
