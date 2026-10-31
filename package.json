@@ -10,10 +10,15 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "test": "node --test 'tests/unit/**/*.test.ts'",
-    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-exclude='src/main.ts' --test-coverage-exclude='src/session.ts' --test-coverage-exclude='src/recorder.ts' --test-coverage-exclude='src/cursor.ts' --test-coverage-exclude='src/interaction.ts' --test-coverage-exclude='src/agent/loop.ts' --test-coverage-exclude='src/postprocess/render.ts' --test-coverage-exclude='src/postprocess/cli.ts' --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 'tests/unit/**/*.test.ts'",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/*.ts' --test-coverage-exclude='src/main.ts' --test-coverage-exclude='src/session.ts' --test-coverage-exclude='src/recorder.ts' --test-coverage-exclude='src/cursor.ts' --test-coverage-exclude='src/interaction.ts' --test-coverage-exclude='src/agent/loop.ts' --test-coverage-exclude='src/postprocess/render.ts' --test-coverage-exclude='src/postprocess/cli.ts' --test-coverage-exclude='src/runner/index.ts' --test-coverage-exclude='src/runner/manager.ts' --test-coverage-exclude='src/server/index.ts' --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 'tests/unit/**/*.test.ts'",
     "lint:shell": "sh -c 'set -- $(find docker scripts -type f \\( -name \"*.sh\" -o -name \"wait-for-x\" -o -name \"start-chrome\" -o -name \"gen-squid-conf\" \\) 2>/dev/null); [ $# -eq 0 ] && { echo \"lint:shell: no shell scripts\"; exit 0; }; docker run --rm -v \"$PWD:/mnt\" koalaman/shellcheck:v0.11.0 \"$@\"'",
     "lint:docker": "sh -c 'rc=0; for f in $(find . -name Dockerfile -not -path \"./node_modules/*\" -not -path \"./spike/*\" | sort); do docker run --rm -i hadolint/hadolint:v2.14.0 hadolint - < \"$f\" || rc=1; done; exit $rc'",
-    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run lint:shell && npm run lint:docker",
+    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run ui:typecheck && npm run ui:test && npm run lint:shell && npm run lint:docker",
+    "ui:build": "npm --prefix ui run build",
+    "ui:typecheck": "npm --prefix ui run typecheck",
+    "ui:test": "npm --prefix ui run test",
+    "runner": "node src/runner/index.ts",
+    "server": "node src/server/index.ts",
     "test:acceptance": "node tests/acceptance/run.ts"
   },
   "dependencies": {

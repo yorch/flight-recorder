@@ -1,0 +1,13 @@
+{
+  "name": "blog-escape",
+  "title": "x\"><img onerror=alert(1)>",
+  "start_url": "http://app.test/admin/login",
+  "goal": "Log in, create a post titled 'Launch Post' with image hero.png, publish it, verify it on the public blog.",
+  "allowed_origins": ["http://app.test"],
+  "allowed_hosts": ["app.test:80"],
+  "assets": ["hero.png"],
+  "secrets": {
+    "TEST_USER_EMAIL": { "origins": ["http://app.test"], "input_types": ["email", "text"] },
+    "TEST_USER_PASSWORD": { "origins": ["http://app.test"], "input_types": ["password"] }
+  }
+}

@@ -219,7 +219,7 @@ describe('StubClient', () => {
       JSON.stringify({
         image_size: { width: 100, height: 50 },
         turns: [
-          { action: { kind: 'click', label: 'a', ref: 'e1' }, sleep_ms: 1 },
+          { action: { kind: 'click', plan_step: null, label: 'a', ref: 'e1' }, sleep_ms: 1 },
           { action: { kind: 'done', status: 'FAILED', summary: 'end' } },
         ],
       }),

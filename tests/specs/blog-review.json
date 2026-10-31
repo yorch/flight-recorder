@@ -1,0 +1,15 @@
+{
+  "name": "blog-review",
+  "title": "Blog post (plan review)",
+  "start_url": "http://app.test/admin/login",
+  "goal": "Log in to the blog admin as the test user, create a new post titled 'Launch Post' with the image hero.png and the body text 'Hello readers', mark it published, save it, then open the public blog and confirm the post is listed and shows its image.",
+  "allowed_origins": ["http://app.test"],
+  "allowed_hosts": ["app.test:80"],
+  "assets": ["hero.png"],
+  "review_plan": true,
+  "approval_timeout_s": 20,
+  "secrets": {
+    "TEST_USER_EMAIL": { "origins": ["http://app.test"], "input_types": ["email", "text"] },
+    "TEST_USER_PASSWORD": { "origins": ["http://app.test"], "input_types": ["password"] }
+  }
+}

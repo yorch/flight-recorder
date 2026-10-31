@@ -22,8 +22,26 @@ export interface ModelReply {
   usage: { input_tokens: number; output_tokens: number };
 }
 
+/** One structured-output call: a system prompt, ordered content parts, and a JSON schema. */
+export interface StructuredInput {
+  system: string;
+  parts: ({ type: 'text'; text: string } | { type: 'image'; png: Buffer })[];
+  schema: object;
+  name: string; // strict schema name (used by OpenAI)
+}
+
+export interface NextInput {
+  spec: TestSpec;
+  observation: Observation;
+  history: StepRecord[];
+  schema: object;
+  plan?: import('./plan.ts').Plan;
+  planStatus?: Record<string, string>;
+}
+
 export interface ModelClient {
   readonly id: string;
   imageSize(screen: Size): Size;
-  next(input: { spec: TestSpec; observation: Observation; history: StepRecord[]; schema: object }): Promise<ModelReply>;
+  structured(input: StructuredInput): Promise<ModelReply>;
+  next(input: NextInput): Promise<ModelReply>;
 }

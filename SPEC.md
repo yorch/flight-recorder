@@ -1174,6 +1174,7 @@ The agent's own claim is never enough to pass a run, because page content can st
 **Common behaviour:**
 
 - **Wire schema:** the loop passes a wire schema derived from `AgentTurn`: `toWireSchema(z.toJSONSchema(AgentTurn))`. It turns `oneOf` into `anyOf`, strips the numeric/length/pattern/format constraints neither provider accepts in strict mode, and makes every object `additionalProperties: false` with all keys `required`. Optional fields are therefore nullable instead of omitted. zod still validates every reply in full.
+- **Anthropic grammar limits** (verified live): its `json_schema` output format allows at most 16 union-typed parameters, `minItems` only `0`/`1`, no `maxItems`/`uniqueItems`/`minProperties`/`maxProperties`, and an internal compiled-grammar size limit (the fully inlined 14-variant action schema exceeded it). The wire schema therefore **hoists `label` and `plan_step` out of the action variants into the turn object**, and turns `plan_step`/`criterion` into `enum`s of the real plan ids (`enum: [null]` when there is no plan), which also prevents plan-id hallucination. `done` replies carry neither field.
 - **Enum casing:** providers don't guarantee the casing of enum values, so replies go through `normalizeEnums()` (case-insensitive mapping onto the known literal sets) before validation.
 - **Retries:** `postJson()` retries network errors and 408/409/429/5xx/529 up to 4 attempts, with exponential backoff and jitter, honouring `retry-after`. Each attempt has a 120 s timeout.
 - **Prompt:** one system prompt shared by both providers (`src/agent/prompt.ts`) implements the requirements in §6.2.
@@ -1625,8 +1626,6 @@ All gates must pass before a change lands. `npm run check` runs the first five; 
 
 ## 15. Natural-Language Runs: Plan, Execute, Evaluate, Report
 
-> **Status: designed, not yet implemented** (as of 2026-10-30). §0–§14 are implemented, and the acceptance suite passes criteria 1–21. The phase plan is in `AGENTS.md`.
-
 A run can be requested with plain instructions, for example: "Go to the blog admin, create a new post titled 'Launch' with the image hero.png, publish it, and check that it appears on the public blog." The orchestrator turns the instructions into a plan, executes it, evaluates the outcome, and writes a report with video and screenshots.
 
 ### 15.1 Request and TestSpec Extensions
@@ -1636,7 +1635,7 @@ A run can be requested with plain instructions, for example: "Go to the blog adm
 ```typescript
   title?: string;               // display name; defaults to `name`
   goal: string;                 // the natural-language instructions (unchanged field, now multi-step)
-  assets?: string[];            // file names available for upload, resolved under /run-input/assets (or /tests/assets)
+  assets?: string[];            // file names available for upload, resolved under <dirname(TEST_FILE)>/assets (e.g. /run-input/assets)
   review_plan?: boolean;        // pause for approval after planning (default false)
   approval_timeout_s?: number;  // default 1800; no approval in time ends the run CANCELLED
 ```
@@ -1670,6 +1669,7 @@ The agent (§6.3) receives the plan and the step statuses so far in every turn. 
   - Otherwise it clicks the ref while waiting for the `filechooser` event, then calls `fileChooser.setFiles`. Playwright intercepts the chooser, so no native dialog opens.
   - File names must be in `assets`. Names are matched exactly, never treated as paths, so there is no traversal. Playwright transfers the file contents to the remote browser.
 - `assert_url { label, plan_step, criterion, matches }` checks the current URL against a regular expression.
+- **Finish nudge.** `done: PASSED` is not accepted while any criterion lacks a passing assertion. The loop feeds back which criteria are unproven and the agent continues; after two reminders the run ends `UNVERIFIED` unless the agent asserts them or reports `FAILED`. (This avoids wasting a full run on a missing assertion: measured live, the agent completed 26/26 steps successfully but reported done with one unproven criterion.)
 - Chapters (§7.5) are labelled `pN · <label>`. `chapters.json` adds `plan_step` to each chapter.
 
 ### 15.4 Evaluation (`src/agent/evaluator.ts`)
@@ -1699,9 +1699,9 @@ A criterion is **verified** when at least one harness-executed assertion with th
 | Condition | Status |
 |---|---|
 | Harness error or budget exceeded | `FAILED` |
-| Any assertion failed, any `step_done` FAILED, agent claimed `FAILED`, any criterion `NOT_MET`, or any `high` issue | `FAILED` |
+| Any assertion failed, any `step_done` FAILED, agent claimed `FAILED`, any criterion `NOT_MET`, any `high` issue, or any `spec.expect` check failed | `FAILED` |
 | Agent claimed `PASSED`, every plan step `step_done` PASSED, every criterion verified, and `spec.expect` (if present) all pass | `PASSED` |
-| Anything else (for example, a criterion with no passing assertion, or one marked `UNCLEAR`) | `UNVERIFIED` |
+| Anything else (for example, a criterion with no passing assertion, one marked `UNCLEAR`, or failed `expect` checks on a claimed `FAILED` run) | `UNVERIFIED` |
 | Rejected or timed-out plan, or a cancel from the control plane | `CANCELLED` (exit 4) |
 
 The evaluator can only downgrade a run: its `MET` never passes a criterion without deterministic evidence. `RunStatus` becomes `PASSED | FAILED | UNVERIFIED | CANCELLED`.
@@ -1720,7 +1720,7 @@ The evaluator can only downgrade a run: its `MET` never passes a criterion witho
 
 ## 16. Control Plane and Web UI
 
-> **Status: designed, not yet implemented.** User decisions: the control plane runs in a container behind a host runner daemon; plan review is an optional per-run toggle; the UI is React + Vite; it is localhost only, with no login.
+> User decisions behind this section: the control plane runs in a container behind a host runner daemon; plan review is an optional per-run toggle; the UI is React + Vite; it is localhost only, with no login.
 
 ```text
  browser (you) --http--> ui container (127.0.0.1:7070, React SPA + API)
@@ -1752,17 +1752,18 @@ Node 26 with `node:http`. It serves the built SPA and a JSON API.
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/runs` | All runs, newest first. Status is merged from `request.json`, the runner state, `status.json` and `run.json`. |
-| `POST /api/runs` | Create a run from the form: title, instructions, start URL, model, credentials, extra hosts/origins, budgets, `review_plan`, assets. Uploads are `multipart/form-data`, at most 20 files of up to 25 MB each, with names sanitised to `[A-Za-z0-9._-]`. Writes the request dir, then calls the runner. |
-| `GET /api/runs/:id` | Request, status, plan, report and events summary. |
-| `GET /api/runs/:id/events` | Server-sent events: tail of `events.jsonl` plus `status.json` changes. |
+| `GET /api/runs` | All runs, newest first, with steps and token counts. Status is merged from `request.json`, the runner state, `status.json` and `run.json`. |
+| `POST /api/runs` | Create a run from the form: title, instructions, start URL, model, credentials, extra hosts/origins, budgets, `review_plan`, assets, and an optional `stub_script` (saved to `stub/script.json` for stub runs). Uploads are `multipart/form-data`, at most 20 files of up to 25 MB each, with names sanitised to `[A-Za-z0-9._-]`. Writes the request dir, then calls the runner. |
+| `GET /api/runs/:id` | Request, spec, runner state, `status.json`, `run.json`, plan, evaluation, report and an events summary. |
+| `GET /api/runs/:id/events` | Server-sent events: tail of `events.jsonl` plus `status.json` changes (`retry: 3000`; the stream ends with a `done` event carrying `run.json`). |
+| `GET /api/runs/:id/screenshots` | Screenshot file names (for the live view and gallery). |
 | `POST /api/runs/:id/approve` | `{ plan? }`; writes `control/approval.json`. |
 | `POST /api/runs/:id/reject` | Writes a reject decision. |
 | `POST /api/runs/:id/cancel` | Cancels through the runner. |
 | `POST /api/runs/:id/rerun` | New run from the same request and assets. |
 | `GET /api/models` | Providers whose key files exist, with suggested model ids. |
 | `GET /api/secrets` | Names only of files in `./secrets` (excluding API and runner keys). Values are never returned. |
-| `GET /artifacts/:id/*` | Read-only artifact files. |
+| `GET /artifacts/:id/*` | Read-only artifact files with single-range `bytes=` support, which `<video>` needs because ffmpeg writes the moov atom at the end of `final.mp4`. |
 
 **Credentials** are picked by name from `/api/secrets`, with their input types. Their origins default to the start URL's origin. Secret values are managed as files in `./secrets/` and are never entered in or shown by the UI.
 

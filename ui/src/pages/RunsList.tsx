@@ -1,0 +1,100 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { StatusBadge } from '../components/StatusBadge.tsx';
+import { apiGet, type RunRow } from '../lib/api.ts';
+import { nav } from '../lib/router.ts';
+import { FILTERABLE, fmtDateTime, fmtDuration, isTerminalRow, matchesFilter } from '../lib/status.ts';
+
+export function RunsList() {
+  const [runs, setRuns] = useState<RunRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>('all');
+  const timer = useRef<number | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const { runs } = await apiGet<{ runs: RunRow[] }>('/api/runs');
+      setRuns(runs);
+      setError(null);
+      return runs;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return null;
+    }
+  }, []);
+
+  // Auto-refresh every 2 s while any run is non-terminal (§16.3).
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      const rows = await load();
+      if (cancelled) return;
+      if (rows?.some((r) => !isTerminalRow(r))) {
+        timer.current = window.setTimeout(tick, 2000);
+      }
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer.current !== null) window.clearTimeout(timer.current);
+    };
+  }, [load]);
+
+  const visible = (runs ?? []).filter((r) => matchesFilter(r, filter));
+
+  return (
+    <section>
+      <div className="row spread">
+        <h2>Runs</h2>
+        <div className="row">
+          <label htmlFor="status-filter">status</label>
+          <select id="status-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            {FILTERABLE.map((f) => (
+              <option key={f} value={f}>
+                {f.replaceAll('_', ' ')}
+              </option>
+            ))}
+          </select>
+          <a className="btn primary" href="#/new">
+            New run
+          </a>
+        </div>
+      </div>
+      {error && <div className="banner error">{error}</div>}
+      {runs === null && !error && <p className="muted">loading…</p>}
+      {runs !== null && visible.length === 0 && <p className="muted">no runs match</p>}
+      {visible.length > 0 && (
+        <table className="runs">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Title</th>
+              <th>Model</th>
+              <th>Created</th>
+              <th>Duration</th>
+              <th>Steps</th>
+              <th>Tokens</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map((r) => (
+              <tr key={r.run_id} onClick={() => nav(`/run/${r.run_id}`)} onKeyDown={() => nav(`/run/${r.run_id}`)}>
+                <td>
+                  <StatusBadge status={r.status} />
+                </td>
+                <td>
+                  <a href={`#/run/${r.run_id}`}>{r.title ?? r.run_id}</a>
+                  <div className="muted small">{r.run_id}</div>
+                </td>
+                <td className="mono">{r.model ?? '—'}</td>
+                <td className="mono">{fmtDateTime(r.started_at ?? r.submitted_at)}</td>
+                <td className="mono">{fmtDuration(r.started_at ?? r.submitted_at, r.ended_at)}</td>
+                <td className="mono">{r.steps ?? '—'}</td>
+                <td className="mono">{r.tokens ? `${r.tokens.input ?? 0}/${r.tokens.output ?? 0}` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}

@@ -32,20 +32,34 @@ export type Expectation = z.infer<typeof ExpectationSchema>;
 
 export const TestSpecSchema = z.object({
   name: z.string().min(1),
+  title: z.string().min(1).max(80).optional(),
   start_url: z.string().min(1),
   goal: z.string(),
-  allowed_origins: z.array(z.string().refine(isValidOrigin, { error: 'invalid allowed_origins entry' })).min(1),
+  allowed_origins: z
+    .array(z.string().refine(isValidOrigin, { error: 'invalid allowed_origins entry' }))
+    .min(1)
+    .optional(),
   allowed_hosts: z.array(z.string().refine(isValidHostEntry, { error: 'invalid allowed_hosts entry' })).optional(),
   expect: z.array(ExpectationSchema).optional(),
   secrets: z.record(z.string(), SecretBindingSchema).optional(),
+  assets: z.array(z.string().min(1)).max(20).optional(),
+  review_plan: z.boolean().optional(),
+  approval_timeout_s: z.number().positive().optional(),
   max_steps: z.number().int().positive().optional(),
   timeout_s: z.number().positive().optional(),
   max_model_tokens: z.number().int().positive().optional(),
 });
-export type TestSpec = z.infer<typeof TestSpecSchema>;
+export type TestSpecInput = z.infer<typeof TestSpecSchema>;
+export type TestSpec = TestSpecInput & { allowed_origins: string[] };
 
 export function parseTestSpec(json: unknown): TestSpec {
-  return TestSpecSchema.parse(json);
+  const spec = TestSpecSchema.parse(json);
+  if (spec.allowed_origins) return spec as TestSpec;
+  try {
+    return { ...spec, allowed_origins: [new URL(spec.start_url).origin] };
+  } catch {
+    throw new Error('allowed_origins is required when start_url has no valid origin');
+  }
 }
 
 export function loadTestSpec(file: string): TestSpec {

@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { TestSpec } from '../../config.ts';
 import type { Size } from '../../events.ts';
-import type { ModelClient, ModelReply, Observation, StepRecord } from '../contract.ts';
+import type { ModelClient, ModelReply, NextInput, StructuredInput } from '../contract.ts';
 import { buildUserText, systemPromptFor } from '../prompt.ts';
 import { postJson } from './http.ts';
 
@@ -78,20 +77,16 @@ export class AnthropicClient implements ModelClient {
     return resizedSize(screen.width, screen.height, this.tier.maxEdge, this.tier.maxTokens);
   }
 
-  async next(input: { spec: TestSpec; observation: Observation; history: StepRecord[]; schema: object }): Promise<ModelReply> {
-    const { observation } = input;
-    const userContent: unknown[] = [];
-    if (observation.screenshot) {
-      userContent.push({
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/png', data: observation.screenshot.png.toString('base64') },
-      });
-    }
-    userContent.push({ type: 'text', text: buildUserText(input) });
+  async structured(input: StructuredInput): Promise<ModelReply> {
+    const userContent: unknown[] = input.parts.map((p) =>
+      p.type === 'image'
+        ? { type: 'image', source: { type: 'base64', media_type: 'image/png', data: p.png.toString('base64') } }
+        : { type: 'text', text: p.text },
+    );
     const body = {
       model: this.model,
       max_tokens: 4096,
-      system: systemPromptFor(observation),
+      system: input.system,
       messages: [{ role: 'user', content: userContent }],
       output_config: { format: { type: 'json_schema', schema: input.schema } },
     };
@@ -117,5 +112,12 @@ export class AnthropicClient implements ModelClient {
       raw: JSON.parse(block.text),
       usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 },
     };
+  }
+
+  async next(input: NextInput): Promise<ModelReply> {
+    const parts: StructuredInput['parts'] = [];
+    if (input.observation.screenshot) parts.push({ type: 'image', png: input.observation.screenshot.png });
+    parts.push({ type: 'text', text: buildUserText(input) });
+    return this.structured({ system: systemPromptFor(input.observation, input.plan), parts, schema: input.schema, name: 'agent_turn' });
   }
 }

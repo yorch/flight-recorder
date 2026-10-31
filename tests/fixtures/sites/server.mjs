@@ -14,6 +14,44 @@ const PASSWORD = process.env.SITE_PASSWORD || 's3cret-test-pw';
 const page = (t, b) => `<!doctype html><html><head><title>${t}</title></head><body>${b}</body></html>`;
 
 const PAGES = {
+  'admin/login': page(
+    'Blog admin',
+    `<h1>Blog admin</h1>
+    <form method="post" action="/admin/login">
+      <label>Email <input name="email" type="email"></label><br>
+      <label>Password <input name="password" type="password"></label><br>
+      <button type="submit">Sign in</button>
+    </form>`,
+  ),
+  'admin/posts': page('Admin posts', 'DYNAMIC_ADMIN_POSTS'),
+  'admin/posts/new': page(
+    'New post',
+    `<h1>New post</h1>
+    <form id="f">
+      <label>Title <input id="t" name="title" type="text"></label><br>
+      <label>Body <textarea id="b" name="body"></textarea></label><br>
+      <button type="button" id="choose">Choose image</button>
+      <input id="file" type="file" accept="image/*" hidden>
+      <span id="fname"></span><br>
+      <label><input id="pub" type="checkbox" name="published"> Published</label><br>
+      <button type="button" id="save">Save</button>
+      <output id="status" role="status"></output>
+    </form>
+    <script>
+      const f = document.getElementById('file');
+      document.getElementById('choose').onclick = () => f.click();
+      f.onchange = () => { document.getElementById('fname').textContent = f.files[0] ? f.files[0].name : ''; };
+      document.getElementById('save').onclick = async () => {
+        const fd = new FormData();
+        fd.append('title', document.getElementById('t').value);
+        fd.append('body', document.getElementById('b').value);
+        if (document.getElementById('pub').checked) fd.append('published', '1');
+        if (f.files[0]) fd.append('image', f.files[0]);
+        const r = await fetch('/admin/posts', { method: 'POST', body: fd });
+        if (r.redirected) location.href = r.url;
+      };
+    </script>`,
+  ),
   login: page(
     'Sign in',
     `<h1>Sign in</h1>
@@ -85,12 +123,38 @@ const PAGES = {
   'img.png': null,
 };
 
+const posts = []; // {slug, title, body, published, img:{buf,type}, sha256, size}
+const slugify = (t) =>
+  t
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'post';
+
+// Minimal multipart/form-data parser for the admin post form.
+function parseMultipart(body, boundary) {
+  const out = {};
+  for (const part of body.split(`--${boundary}`)) {
+    if (!part || part === '--' || part === '--\r\n') continue;
+    const i = part.indexOf('\r\n\r\n');
+    if (i < 0) continue;
+    const head = part.slice(0, i);
+    let data = part.slice(i + 4);
+    if (data.endsWith('\r\n')) data = data.slice(0, -2);
+    const name = /name="([^"]+)"/.exec(head)?.[1];
+    const filename = /filename="([^"]*)"/.exec(head)?.[1];
+    const ctype = /Content-Type:\s*([^\r\n]+)/i.exec(head)?.[1]?.trim();
+    if (name) out[name] = filename !== undefined && filename !== '' ? { filename, data: Buffer.from(data, 'latin1'), ctype } : data;
+  }
+  return out;
+}
+
 function handle(req, res) {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname;
   const host = (req.headers.host ?? '').split(':')[0];
   if (req.method === 'POST') {
     let body = '';
+    req.setEncoding('latin1');
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       rec({
@@ -104,6 +168,42 @@ function handle(req, res) {
       });
       if (p === '/__log') {
         res.writeHead(204).end();
+        return;
+      }
+      if (p === '/admin/login') {
+        const q = new URLSearchParams(body);
+        const ok = q.get('email') === EMAIL && q.get('password') === PASSWORD;
+        res
+          .writeHead(ok ? 303 : 403, ok ? { location: '/admin/posts' } : { 'content-type': 'text/html' })
+          .end(ok ? '' : page('Denied', '<h1>Invalid</h1>'));
+        return;
+      }
+      if (p === '/admin/posts') {
+        const boundary = /boundary=([^;]+)/.exec(req.headers['content-type'] ?? '')?.[1];
+        const parts = boundary ? parseMultipart(body, boundary) : {};
+        const file = parts.image;
+        // latin1 data keeps bytes exact
+        const sha = file ? crypto.createHash('sha256').update(file.data).digest('hex') : null;
+        const post = {
+          slug: `${slugify(String(parts.title ?? 'post'))}-${posts.length}`,
+          title: String(parts.title ?? ''),
+          body: String(parts.body ?? ''),
+          published: parts.published !== undefined,
+          img: file ? { buf: file.data, type: file.ctype ?? 'application/octet-stream' } : null,
+          sha256: sha,
+          size: file ? file.data.length : 0,
+        };
+        posts.push(post);
+        rec({
+          proto: 'server',
+          msg: 'post_created',
+          slug: post.slug,
+          title: post.title,
+          published: post.published,
+          upload_sha256: sha,
+          upload_size: post.size,
+        });
+        res.writeHead(303, { location: '/blog' }).end();
         return;
       }
       if (p === '/login') {
@@ -145,6 +245,51 @@ function handle(req, res) {
   }
   if (host === 'other.test' && p === '/form') {
     res.writeHead(200, { 'content-type': 'text/html' }).end(PAGES.form);
+    return;
+  }
+  if (p === '/admin/posts') {
+    const rows = posts
+      .map(
+        (x) => `<li>${x.title} — ${x.published ? `<span>Published</span> <a href="/blog/${x.slug}">view</a>` : '<span>Draft</span>'}</li>`,
+      )
+      .join('');
+    res
+      .writeHead(200, { 'content-type': 'text/html' })
+      .end(
+        page(
+          'Admin posts',
+          `<h1>Admin posts</h1><p><a href="/admin/posts/new">New post</a></p><ul>${rows || '<li>No posts yet</li>'}</ul>`,
+        ),
+      );
+    return;
+  }
+  if (p === '/blog') {
+    const items = posts
+      .filter((x) => x.published)
+      .map((x) => `<li><a href="/blog/${x.slug}">${x.title}</a></li>`)
+      .join('');
+    res.writeHead(200, { 'content-type': 'text/html' }).end(page('Blog', `<h1>Blog</h1><ul>${items || '<li>No posts yet</li>'}</ul>`));
+    return;
+  }
+  const postMatch = /^\/blog\/([a-z0-9-]+)$/.exec(p);
+  if (postMatch) {
+    const post = posts.find((x) => x.slug === postMatch[1]);
+    if (!post) {
+      res.writeHead(404).end('nf');
+      return;
+    }
+    const img = post.img ? `<img src="/blog/img/${post.slug}" alt="${post.title}">` : '';
+    res.writeHead(200, { 'content-type': 'text/html' }).end(page(post.title, `<h1>${post.title}</h1>${img}<p>${post.body}</p>`));
+    return;
+  }
+  const imgMatch = /^\/blog\/img\/([a-z0-9-]+)$/.exec(p);
+  if (imgMatch) {
+    const post = posts.find((x) => x.slug === imgMatch[1]);
+    if (!post?.img) {
+      res.writeHead(404).end('nf');
+      return;
+    }
+    res.writeHead(200, { 'content-type': post.img.type }).end(post.img.buf);
     return;
   }
   if (PAGES[p.slice(1)]) {

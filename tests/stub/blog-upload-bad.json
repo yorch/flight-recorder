@@ -1,0 +1,69 @@
+{
+  "plan": {
+    "title": "t",
+    "steps": [
+      {
+        "id": "p1",
+        "intent": "upload files",
+        "expected": "done"
+      }
+    ],
+    "criteria": [
+      {
+        "id": "c1",
+        "description": "d"
+      }
+    ]
+  },
+  "evaluation": {
+    "criteria": [
+      {
+        "id": "c1",
+        "status": "MET",
+        "evidence": "assertions and final screenshot show the listing",
+        "screenshots": ["final.png"]
+      },
+      {
+        "id": "c2",
+        "status": "MET",
+        "evidence": "post page shows the image",
+        "screenshots": ["final.png"]
+      }
+    ],
+    "issues": [],
+    "conclusions": "The post was created, published and verified on the public blog with its image."
+  },
+  "turns": [
+    {
+      "action": {
+        "kind": "upload",
+        "label": "Upload secret file",
+        "plan_step": "p1",
+        "ref_for": {
+          "role": "button",
+          "name": "Choose image"
+        },
+        "files": ["../etc/passwd"]
+      }
+    },
+    {
+      "action": {
+        "kind": "upload",
+        "label": "Upload undeclared",
+        "plan_step": "p1",
+        "ref_for": {
+          "role": "button",
+          "name": "Choose image"
+        },
+        "files": ["nope.png"]
+      }
+    },
+    {
+      "action": {
+        "kind": "done",
+        "status": "FAILED",
+        "summary": "uploads rejected"
+      }
+    }
+  ]
+}

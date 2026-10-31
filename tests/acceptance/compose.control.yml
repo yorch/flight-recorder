@@ -1,0 +1,4 @@
+services:
+  orchestrator:
+    volumes:
+      - ${CONTROL_DIR_HOST}:/control:ro

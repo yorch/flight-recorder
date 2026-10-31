@@ -151,7 +151,7 @@ describe('prompt', () => {
       spec,
       observation: { ...obs, dialog: { type: 'confirm', message: 'sure?', default_value: '' } },
       history: [
-        { step_id: 's0001', action: { kind: 'click', label: 'l', ref: 'e1' }, result: 'PASSED' },
+        { step_id: 's0001', action: { kind: 'click', label: 'l', plan_step: null, ref: 'e1' }, result: 'PASSED' },
         { step_id: 's0002', result: 'FAILED', error: 'oops' },
       ],
     });

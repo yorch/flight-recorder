@@ -1,5 +1,7 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 
 const ROOT = process.cwd();
@@ -63,6 +65,72 @@ const diagEnv = {
 const diagUp = () => sh(`${compose} up -d --wait --build browser sites`, diagEnv);
 const diagDown = () => sh(`${compose} down -v`, diagEnv);
 const diagRun = (args: string) => sh(`${compose} run --rm --entrypoint node orchestrator ${args}`, diagEnv);
+
+// --- helpers for criteria 27-28 (host processes: runner daemon, control plane, fake runner) ---
+interface Spawned {
+  proc: ReturnType<typeof spawn>;
+  output: () => string;
+}
+const spawnReady = (args: string[], env: NodeJS.ProcessEnv, marker: RegExp, timeoutMs = 90_000): Promise<Spawned> => {
+  const proc = spawn(args[0], args.slice(1), { cwd: ROOT, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let buf = '';
+  proc.stdout.on('data', (c) => (buf += c));
+  proc.stderr.on('data', (c) => (buf += c));
+  return new Promise<Spawned>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${args.join(' ')} did not print ${marker}: ${buf.slice(-600)}`)), timeoutMs);
+    const iv = setInterval(() => {
+      if (marker.test(buf)) {
+        clearTimeout(t);
+        clearInterval(iv);
+        resolve({ proc, output: () => buf });
+      }
+    }, 50);
+    proc.on('exit', (c) => reject(new Error(`${args.join(' ')} exited ${c}: ${buf.slice(-600)}`)));
+  });
+};
+const stopProc = (s: Spawned): Promise<void> => {
+  s.proc.kill('SIGTERM');
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      s.proc.kill('SIGKILL');
+      resolve();
+    }, 90_000);
+    s.proc.on('exit', () => {
+      clearTimeout(t);
+      resolve();
+    });
+  });
+};
+const waitFor = async (fn: () => Promise<boolean>, timeoutMs: number): Promise<boolean> => {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (await fn().catch(() => false)) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+};
+const httpCall = (
+  method: string,
+  port: number,
+  p: string,
+  headers: Record<string, string>,
+  body?: string | Buffer,
+): Promise<{ code: number; headers: http.IncomingHttpHeaders; body: string }> =>
+  new Promise((resolve, reject) => {
+    const r = http.request({ host: '127.0.0.1', port, path: p, method, headers }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ code: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks).toString() }));
+    });
+    r.on('error', reject);
+    if (body !== undefined) r.write(body);
+    r.end();
+  });
+const accRunId = (): string => {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}-${crypto.randomBytes(2).toString('hex')}`;
+};
 
 interface Criterion {
   id: number;
@@ -586,6 +654,427 @@ const CRITERIA: Criterion[] = [
         pass,
         evidence: { denied: j.egress?.denied, allowed: j.egress?.allowed, logExists: fs.existsSync(`${r.dir}/logs/proxy-access.log`) },
       };
+    },
+  },
+
+  {
+    id: 22,
+    title: 'NL blog scenario: plan, execute, evaluate, report (stub)',
+    run: async () => {
+      const r = runTest('specs/blog.json', 'blog.json');
+      if (!r.dir || !fs.existsSync(r.dir)) return { pass: false, evidence: { error: 'no run dir', out: r.out.slice(-800) } };
+      const j = runJson(r.dir);
+      const ev = eventsOf(r.dir);
+      const plan = fs.existsSync(`${r.dir}/plan.json`) ? JSON.parse(fs.readFileSync(`${r.dir}/plan.json`, 'utf8')) : null;
+      const evaln = fs.existsSync(`${r.dir}/evaluation.json`) ? JSON.parse(fs.readFileSync(`${r.dir}/evaluation.json`, 'utf8')) : null;
+      const heroSha = crypto.createHash('sha256').update(fs.readFileSync('tests/specs/assets/hero.png')).digest('hex');
+      const postLog = siteLog().find((l) => l.msg === 'post_created');
+      const reports = ['report.json', 'report.md', 'report.html'].filter((f) => fs.existsSync(`${r.dir}/${f}`));
+      const repJson = fs.existsSync(`${r.dir}/report.json`) ? JSON.parse(fs.readFileSync(`${r.dir}/report.json`, 'utf8')) : null;
+      const html = fs.existsSync(`${r.dir}/report.html`) ? fs.readFileSync(`${r.dir}/report.html`, 'utf8') : '';
+      const stepDones = ev.filter((e) => e.type === 'ACTION_START' && e.action === 'step').map((e) => e.plan_step);
+      const uploads = ev.filter((e) => e.type === 'ACTION_START' && e.action === 'upload');
+      const pass =
+        j.status === 'PASSED' &&
+        j.exit_code === 0 &&
+        plan?.steps?.length === 6 &&
+        plan?.criteria?.length === 2 &&
+        evaln?.criteria?.every((c: { status: string }) => c.status === 'MET') &&
+        postLog?.upload_sha256 === heroSha &&
+        reports.length === 3 &&
+        html.includes('src="final.mp4"') &&
+        html.includes('src="chapters.vtt"') &&
+        repJson?.plan?.steps?.every((s: { outcome: string }) => s.outcome === 'PASSED') &&
+        stepDones.length === 6 &&
+        uploads.length === 1 &&
+        repJson?.artifacts?.screenshots?.every((p: string) => fs.existsSync(`${r.dir}/${p}`));
+      return {
+        pass,
+        evidence: {
+          code: r.code,
+          status: j.status,
+          steps: plan?.steps?.length,
+          stepDones,
+          uploads: uploads.length,
+          postLog,
+          heroSha,
+          reports,
+        },
+      };
+    },
+  },
+  {
+    id: 23,
+    title: 'Plan approval: awaiting_approval, edited plan, reject, timeout',
+    run: async () => {
+      const mkControl = () => fs.mkdtempSync('/tmp/acc-control-');
+      const waitForStatus = (phase: string, timeoutMs: number) => {
+        const t0 = Date.now();
+        while (Date.now() - t0 < timeoutMs) {
+          const artifacts = fs
+            .readdirSync('artifacts')
+            .filter((d) => /\d{8}-\d{6}-/.test(d))
+            .sort()
+            .reverse();
+          for (const a of artifacts) {
+            const f = `artifacts/${a}/status.json`;
+            if (fs.existsSync(f)) {
+              try {
+                const st = JSON.parse(fs.readFileSync(f, 'utf8'));
+                if (st.phase === phase && Date.parse(st.updated_at) > t0 - 90000) return `artifacts/${a}`;
+              } catch {
+                /* partial write */
+              }
+            }
+          }
+          spawnSync('sleep', ['0.3']);
+        }
+        return null;
+      };
+      const launch = (ctrl: string) =>
+        spawn('sh', ['scripts/run-test.sh', 'specs/blog-review.json', 'stub//tests/stub/blog.json'], {
+          env: { ...process.env, COMPOSE_OVERLAYS: `${OVERLAY} tests/acceptance/compose.control.yml`, CONTROL_DIR_HOST: ctrl },
+        });
+
+      // (a) approve an edited plan -> the edited plan is what runs.
+      const ctrlA = mkControl();
+      const procA = launch(ctrlA);
+      const runDirA = waitForStatus('awaiting_approval', 120000);
+      const sawAwaitingBeforeVideo = runDirA !== null && !fs.existsSync(`${runDirA}/raw.mkv`);
+      if (runDirA) {
+        const rawPlan = JSON.parse(fs.readFileSync(`${runDirA}/plan.json`, 'utf8'));
+        fs.writeFileSync(
+          `${ctrlA}/approval.json`,
+          JSON.stringify({ decision: 'approve', plan: { ...rawPlan, title: 'EDITED PLAN TITLE' } }),
+        );
+      }
+      const codeA = await new Promise<number>((res) => procA.on('exit', (c) => res(c ?? 1)));
+      const jA = runDirA && fs.existsSync(`${runDirA}/run.json`) ? runJson(runDirA) : null;
+      const editedUsed = runDirA !== null && JSON.parse(fs.readFileSync(`${runDirA}/plan.json`, 'utf8')).title === 'EDITED PLAN TITLE';
+
+      // (b) reject -> CANCELLED, exit 4, no raw.mkv.
+      const ctrlB = mkControl();
+      const procB = launch(ctrlB);
+      const runDirB = waitForStatus('awaiting_approval', 120000);
+      if (runDirB) fs.writeFileSync(`${ctrlB}/approval.json`, JSON.stringify({ decision: 'reject' }));
+      const codeB = await new Promise<number>((res) => procB.on('exit', (c) => res(c ?? 1)));
+      const jB = runDirB && fs.existsSync(`${runDirB}/run.json`) ? runJson(runDirB) : null;
+
+      // (c) approval timeout -> CANCELLED, exit 4, no raw.mkv.
+      const rC = runTest('specs/blog-review-timeout.json', 'blog.json', {
+        COMPOSE_OVERLAYS: 'tests/acceptance/compose.control.yml',
+        CONTROL_DIR_HOST: mkControl(),
+      });
+      const jC = rC.dir && fs.existsSync(`${rC.dir}/run.json`) ? runJson(rC.dir) : null;
+
+      const pass =
+        sawAwaitingBeforeVideo &&
+        editedUsed &&
+        codeA === 0 &&
+        jA?.status === 'PASSED' &&
+        codeB === 4 &&
+        jB?.status === 'CANCELLED' &&
+        runDirB !== null &&
+        !fs.existsSync(`${runDirB}/raw.mkv`) &&
+        rC.code === 4 &&
+        jC?.status === 'CANCELLED' &&
+        rC.dir !== '' &&
+        !fs.existsSync(`${rC.dir}/raw.mkv`);
+      return {
+        pass,
+        evidence: {
+          sawAwaitingBeforeVideo,
+          editedUsed,
+          approve: { code: codeA, status: jA?.status },
+          reject: { code: codeB, status: jB?.status },
+          timeout: { code: rC.code, status: jC?.status },
+        },
+      };
+    },
+  },
+  {
+    id: 24,
+    title: 'Evaluator can only downgrade: NOT_MET, MET-without-assertion, high issue',
+    run: async () => {
+      const r1 = runTest('specs/blog.json', 'blog-eval-notmet.json');
+      const j1 = runJson(r1.dir);
+      const r2 = runTest('specs/blog.json', 'blog-eval-noassert.json');
+      const j2 = runJson(r2.dir);
+      const r3 = runTest('specs/blog.json', 'blog-eval-high.json');
+      const j3 = runJson(r3.dir);
+      const pass =
+        j1.status === 'FAILED' && r1.code === 1 && j2.status === 'UNVERIFIED' && r2.code === 3 && j3.status === 'FAILED' && r3.code === 1;
+      return { pass, evidence: { notmet: [j1.status, r1.code], noassert: [j2.status, r2.code], high: [j3.status, r3.code] } };
+    },
+  },
+  {
+    id: 25,
+    title: 'Upload restrictions: undeclared/traversal names are action errors; nothing reaches the fixture',
+    run: async () => {
+      const before = siteLog().filter((l) => l.msg === 'post_created').length;
+      const r = runTest('specs/blog.json', 'blog-upload-bad.json');
+      const j = runJson(r.dir);
+      const ev = eventsOf(r.dir);
+      const failedUploads = ev.filter((e) => e.type === 'ACTION_END' && e.status === 'FAILED' && (e.error ?? '').includes('upload'));
+      const after = siteLog().filter((l) => l.msg === 'post_created').length;
+      const pass = r.code === 1 && j.status === 'FAILED' && failedUploads.length >= 2 && after === before;
+      return {
+        pass,
+        evidence: {
+          code: r.code,
+          status: j.status,
+          failedUploads: failedUploads.map((e) => e.error?.slice(0, 80)),
+          posts: [before, after],
+        },
+      };
+    },
+  },
+  {
+    id: 26,
+    title: 'Report escaping: <script>/<img onerror> payloads are inert in report.html',
+    run: async () => {
+      const r = runTest('specs/blog-escape.json', 'blog-eval-escape.json');
+      const html = fs.readFileSync(`${r.dir}/report.html`, 'utf8');
+      const imgTags = html.match(/<img[^>]*>/g) ?? [];
+      const ok =
+        !html.includes('<script') &&
+        imgTags.every((t) => !t.includes('onerror')) &&
+        html.includes('&lt;script&gt;') &&
+        !/(?:href|src)="javascript:/.test(html);
+      return {
+        pass: ok,
+        evidence: { code: r.code, imgTags: imgTags.length, rawScript: html.includes('<script'), escaped: html.includes('&lt;script&gt;') },
+      };
+    },
+  },
+
+  {
+    id: 27,
+    title: 'Runner: bearer auth, request validation, FIFO queue, cancel (§16.1)',
+    run: async () => {
+      const dataDir = fs.mkdtempSync('/tmp/acc-runner-data-');
+      const secDir = fs.mkdtempSync('/tmp/acc-runner-sec-');
+      const token = crypto.randomBytes(32).toString('hex');
+      fs.writeFileSync(path.join(secDir, 'RUNNER_TOKEN'), `${token}\n`, { mode: 0o600 });
+      const runner = await spawnReady(
+        ['node', 'src/runner/index.ts'],
+        {
+          RUNNER_BIND: '127.0.0.1:0',
+          RUNNER_DATA_DIR: dataDir,
+          SECRETS_DIR: secDir,
+          MAX_CONCURRENT_RUNS: '1',
+          COMPOSE_OVERLAYS: OVERLAY,
+          SITES_LOG_DIR: path.join(ROOT, SITES_LOG),
+        },
+        /RUNNER_LISTENING http:\/\/127\.0\.0\.1:(\d+)/,
+      );
+      const port = Number(/RUNNER_LISTENING http:\/\/127\.0\.0\.1:(\d+)/.exec(runner.output())?.[1]);
+      const api = async (method: string, p: string, body?: unknown, tok: string | null = token) => {
+        const headers: Record<string, string> = { host: `127.0.0.1:${port}`, 'content-type': 'application/json' };
+        if (tok !== null) headers.authorization = `Bearer ${tok}`;
+        const r = await httpCall(method, port, p, headers, body === undefined ? undefined : JSON.stringify(body));
+        return { code: r.code, json: JSON.parse(r.body || 'null') as { state?: string; exit_code?: number } | null };
+      };
+      const mkReq = (id: string, files: { request?: string; spec?: string } = {}) => {
+        const dir = path.join(dataDir, 'requests', id);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(
+          path.join(dir, 'request.json'),
+          files.request ?? JSON.stringify({ run_id: id, model: 'stub//tests/stub/sleep-loop.json' }),
+        );
+        fs.writeFileSync(
+          path.join(dir, 'spec.json'),
+          files.spec ??
+            JSON.stringify({
+              name: `queue-${id.slice(-4)}`,
+              start_url: 'http://app.test/',
+              goal: 'sleep',
+              allowed_origins: ['http://app.test'],
+            }),
+        );
+      };
+      const ev: Record<string, unknown> = {};
+      let pass = false;
+      try {
+        // Auth: missing and wrong tokens -> 401.
+        ev.noToken = (await api('GET', '/health', undefined, null)).code;
+        ev.wrongToken = (await api('GET', '/health', undefined, '0'.repeat(64))).code;
+        // Validation: malformed id, traversal, missing dir, invalid spec, unknown provider -> 400.
+        ev.malformed = (await api('POST', '/runs', { run_id: 'nope' })).code;
+        ev.traversal = (await api('POST', '/runs', { run_id: '../escape' })).code;
+        ev.missingDir = (await api('POST', '/runs', { run_id: '20261030-000000-aaaa' })).code;
+        mkReq('20261030-000000-bbbb', { spec: '{"name":1}' });
+        ev.badSpec = (await api('POST', '/runs', { run_id: '20261030-000000-bbbb' })).code;
+        mkReq('20261030-000000-cccc', { request: JSON.stringify({ run_id: '20261030-000000-cccc', model: 'ollama/x' }) });
+        ev.badProvider = (await api('POST', '/runs', { run_id: '20261030-000000-cccc' })).code;
+
+        // Queueing: MAX_CONCURRENT_RUNS=1 → second run stays queued while the first runs.
+        const id1 = accRunId();
+        const id2 = accRunId();
+        mkReq(id1);
+        mkReq(id2);
+        ev.post1 = (await api('POST', '/runs', { run_id: id1 })).code;
+        ev.post2 = (await api('POST', '/runs', { run_id: id2 })).code;
+        ev.id1Running = await waitFor(async () => (await api('GET', `/runs/${id1}`)).json?.state === 'running', 480_000);
+        ev.id2WhileFirstRuns = (await api('GET', `/runs/${id2}`)).json?.state;
+
+        // Cancelling a queued run removes it.
+        ev.cancelQueued = (await api('POST', `/runs/${id2}/cancel`)).json?.state;
+
+        // Cancelling a running run -> orchestrator exits CANCELLED (4).
+        await api('POST', `/runs/${id1}/cancel`);
+        ev.id1Finished = await waitFor(async () => {
+          const s = (await api('GET', `/runs/${id1}`)).json;
+          return s?.state === 'cancelled' || s?.state === 'exited';
+        }, 240_000);
+        ev.id1State = (await api('GET', `/runs/${id1}`)).json;
+        const j1 = fs.existsSync(`artifacts/${id1}/run.json`) ? runJson(`artifacts/${id1}`) : null;
+        ev.id1Run = j1 ? { status: j1.status, exit_code: j1.exit_code } : 'no run.json';
+        pass =
+          ev.noToken === 401 &&
+          ev.wrongToken === 401 &&
+          ev.malformed === 400 &&
+          ev.traversal === 400 &&
+          ev.missingDir === 400 &&
+          ev.badSpec === 400 &&
+          ev.badProvider === 400 &&
+          ev.post1 === 202 &&
+          ev.post2 === 202 &&
+          ev.id1Running === true &&
+          ev.id2WhileFirstRuns === 'queued' &&
+          ev.cancelQueued === 'cancelled' &&
+          ev.id1Finished === true &&
+          j1?.status === 'CANCELLED' &&
+          j1?.exit_code === 4;
+      } finally {
+        await stopProc(runner);
+      }
+      return { pass, evidence: ev };
+    },
+  },
+  {
+    id: 28,
+    title: 'Control-plane guards: Host/Origin/Content-Type + ui container smoke (§16.2)',
+    run: async () => {
+      const dataDir = fs.mkdtempSync('/tmp/acc-ui-data-');
+      const secDir = fs.mkdtempSync('/tmp/acc-ui-sec-');
+      fs.writeFileSync(path.join(secDir, 'RUNNER_TOKEN'), `${crypto.randomBytes(32).toString('hex')}\n`, { mode: 0o600 });
+      const fake = await spawnReady(
+        ['node', 'tests/acceptance/tools/fake-runner.mjs'],
+        { FAKE_RUNNER_BIND: '127.0.0.1:0' },
+        /FAKE_RUNNER_LISTENING http:\/\/127\.0\.0\.1:(\d+)/,
+      );
+      const fakePort = /FAKE_RUNNER_LISTENING http:\/\/127\.0\.0\.1:(\d+)/.exec(fake.output())?.[1];
+      const server = await spawnReady(
+        ['node', 'src/server/index.ts'],
+        {
+          PORT: '0',
+          BIND: '127.0.0.1',
+          DATA_DIR: dataDir,
+          ARTIFACTS_DIR: path.join(ROOT, 'artifacts'),
+          SECRETS_DIR: secDir,
+          RUNNER_URL: `http://127.0.0.1:${fakePort}`,
+          UI_DIST: path.join(dataDir, 'no-ui-dist'),
+        },
+        /SERVER_LISTENING http:\/\/127\.0\.0\.1:(\d+)/,
+      );
+      const port = Number(/SERVER_LISTENING http:\/\/127\.0\.0\.1:(\d+)/.exec(server.output())?.[1]);
+      const ev: Record<string, unknown> = {};
+      let pass = false;
+      try {
+        const form = JSON.stringify({ title: 'T', instructions: 'i', start_url: 'http://app.test', model: 'stub' });
+        const goodHeaders = { host: `127.0.0.1:${port}`, origin: `http://127.0.0.1:${port}`, 'content-type': 'application/json' };
+        ev.wrongHost = (await httpCall('GET', port, '/api/runs', { host: 'evil.test:1' })).code;
+        ev.foreignOrigin = (await httpCall('POST', port, '/api/runs', { ...goodHeaders, origin: 'http://evil.test' }, form)).code;
+        ev.missingOrigin = (
+          await httpCall('POST', port, '/api/runs', { host: `127.0.0.1:${port}`, 'content-type': 'application/json' }, form)
+        ).code;
+        ev.textPlain = (await httpCall('POST', port, '/api/runs', { ...goodHeaders, 'content-type': 'text/plain' }, 'instructions=x')).code;
+        const ok = await httpCall('POST', port, '/api/runs', goodHeaders, form);
+        ev.accepted = ok.code;
+        const created = JSON.parse(ok.body || '{}') as { run_id?: string };
+        ev.requestDir = created.run_id !== undefined && fs.existsSync(path.join(dataDir, 'requests', created.run_id, 'spec.json'));
+        pass =
+          ev.wrongHost === 421 &&
+          ev.foreignOrigin === 403 &&
+          ev.missingOrigin === 403 &&
+          ev.textPlain === 403 &&
+          ev.accepted === 201 &&
+          ev.requestDir === true;
+      } finally {
+        await stopProc(server);
+        await stopProc(fake);
+      }
+      // Container smoke: docker-compose.ui.yml up, GET /api/runs through 127.0.0.1:7070.
+      fs.mkdirSync('data', { recursive: true });
+      fs.mkdirSync('ui/dist', { recursive: true });
+      const up = sh('docker compose -f docker-compose.ui.yml up -d --build --wait', { PORT: '7070' });
+      ev.composeUp = up.code;
+      let smoke: { code: number; runs: number } = { code: 0, runs: -1 };
+      for (let i = 0; i < 60; i++) {
+        try {
+          const r = await httpCall('GET', 7070, '/api/runs', { host: '127.0.0.1:7070' });
+          smoke = { code: r.code, runs: (JSON.parse(r.body || '{}') as { runs?: unknown[] }).runs?.length ?? -1 };
+          if (r.code === 200) break;
+        } catch {
+          await new Promise((r2) => setTimeout(r2, 1000));
+        }
+      }
+      ev.smoke = smoke;
+      ev.composeDown = sh('docker compose -f docker-compose.ui.yml down -v').code;
+      pass = pass && ev.composeUp === 0 && smoke.code === 200 && smoke.runs >= 0 && ev.composeDown === 0;
+      return { pass, evidence: ev };
+    },
+  },
+  {
+    id: 29,
+    title: 'UI end to end: form → approval → report/video/gallery → rerun/cancel (§16.3)',
+    run: async () => {
+      const ev: Record<string, unknown> = {};
+      // Real runner daemon on the host (the ui container reaches it via
+      // host.docker.internal:7071, already in docker-compose.ui.yml).
+      fs.mkdirSync('data', { recursive: true });
+      const runner = await spawnReady(
+        ['node', 'src/runner/index.ts'],
+        {
+          RUNNER_BIND: '127.0.0.1:7071',
+          RUNNER_DATA_DIR: path.join(ROOT, 'data'),
+          SECRETS_DIR: path.join(ROOT, 'secrets'),
+          COMPOSE_OVERLAYS: OVERLAY,
+          SITES_LOG_DIR: path.join(ROOT, SITES_LOG),
+        },
+        /RUNNER_LISTENING http:\/\/127\.0\.0\.1:7071/,
+      );
+      let pass = false;
+      try {
+        const up = sh('docker compose -f docker-compose.ui.yml up -d --build --wait');
+        ev.composeUp = up.code;
+        let health = 0;
+        for (let i = 0; i < 60 && health !== 200; i++) {
+          try {
+            health = (await httpCall('GET', 7070, '/api/health', { host: '127.0.0.1:7070' })).code;
+          } catch {
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+        ev.health = health;
+        const build = sh('docker build -f docker/e2e/Dockerfile -t browser-agent-e2e .');
+        ev.e2eBuild = build.code;
+        const e2e = sh('docker run --rm --add-host host.docker.internal:host-gateway -v "$PWD/tests:/tests:ro" browser-agent-e2e');
+        ev.e2eExit = e2e.code;
+        const m = /E2E_RESULT (.*)/.exec(e2e.out);
+        ev.result = m ? (JSON.parse(m[1]) as Record<string, unknown>) : { tail: e2e.out.slice(-1500) };
+        ev.logTail = e2e.out
+          .split('\n')
+          .filter((l: string) => l.startsWith('[e2e]'))
+          .slice(-12);
+        pass = up.code === 0 && health === 200 && build.code === 0 && e2e.code === 0 && (ev.result as { ok?: boolean }).ok === true;
+      } finally {
+        ev.composeDown = sh('docker compose -f docker-compose.ui.yml down -v').code;
+        await stopProc(runner);
+      }
+      pass = pass && ev.composeDown === 0;
+      return { pass, evidence: ev };
     },
   },
 ];

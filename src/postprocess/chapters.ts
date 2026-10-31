@@ -7,6 +7,7 @@ export interface Chapter {
   status: Status;
   start: number;
   end: number;
+  plan_step?: string | null;
 } // output seconds
 
 /** Run status for chapters.json: a missing RUN_END means the run was truncated or killed. */
@@ -20,7 +21,15 @@ export function buildChapters(events: TimelineEvent[], segs: Segment[], rel: (ms
   for (const ev of events) {
     if (ev.type === 'THINKING_START') open ??= rel(ev.t_ms);
     if (ev.type === 'ACTION_START') {
-      chapters.push({ id: ev.step_id, title: ev.label, status: 'FAILED', start: mapTime(segs, open ?? rel(ev.t_ms)), end: 0 });
+      const title = ev.plan_step ? `${ev.plan_step} · ${ev.label}` : ev.label;
+      chapters.push({
+        id: ev.step_id,
+        title,
+        status: 'FAILED',
+        start: mapTime(segs, open ?? rel(ev.t_ms)),
+        end: 0,
+        plan_step: ev.plan_step ?? null,
+      });
       open = undefined;
     }
     if (ev.type === 'ACTION_END') {

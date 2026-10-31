@@ -1,5 +1,7 @@
 node_modules/
 artifacts/
+data/
+ui/dist/
 coverage/
 secrets/*
 !secrets/.gitkeep

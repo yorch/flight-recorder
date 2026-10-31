@@ -1,0 +1,27 @@
+# Control plane (§16.2): separate, always-up compose project — not part of a run pair.
+name: browser-agent-ui
+
+services:
+  ui:
+    build:
+      context: .
+      dockerfile: docker/ui/Dockerfile
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7070:7070" # localhost only (§16.2 security model)
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # reaches the host runner daemon
+    environment:
+      PORT: "7070"
+      BIND: 0.0.0.0 # inside the container; published only on 127.0.0.1
+      RUNNER_URL: http://host.docker.internal:7071
+      DATA_DIR: /data
+      ARTIFACTS_DIR: /artifacts
+      SECRETS_DIR: /run/secrets
+      UI_DIST: /app/ui/dist
+    volumes:
+      - ./data:/data # rw: request dirs incl. control/
+      - ./artifacts:/artifacts:ro
+      - ./secrets:/run/secrets:ro
+      # ui/dist is baked into the image (docker/ui/Dockerfile stage 1) — no host build needed.

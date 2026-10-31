@@ -1,0 +1,15 @@
+{
+  "name": "blog-review-timeout",
+  "title": "Blog post (approval timeout)",
+  "start_url": "http://app.test/admin/login",
+  "goal": "Create a post titled 'Launch Post' with image hero.png, publish it, verify it on the public blog.",
+  "allowed_origins": ["http://app.test"],
+  "allowed_hosts": ["app.test:80"],
+  "assets": ["hero.png"],
+  "review_plan": true,
+  "approval_timeout_s": 4,
+  "secrets": {
+    "TEST_USER_EMAIL": { "origins": ["http://app.test"], "input_types": ["email", "text"] },
+    "TEST_USER_PASSWORD": { "origins": ["http://app.test"], "input_types": ["password"] }
+  }
+}

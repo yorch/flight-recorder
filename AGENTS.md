@@ -14,32 +14,17 @@ An AI-agent-driven browser testing platform.
 
 | Area | State |
 |---|---|
-| SPEC §0–§14 (core harness) | **Implemented and committed** (`5c21d33`). All gates green; acceptance suite 21/21. |
-| Live smoke, Anthropic (`anthropic/claude-opus-5-5`) | PASSED against the fixture login site. |
-| Live smoke, OpenAI (`openai/gpt-6-astra`) | **Blocked by the key, not the code**: OpenAI returns 401 "Missing scopes: api.responses.write". The user must grant that scope or provide another key in `./secrets/OPENAI_API_KEY`. |
-| SPEC §15 (natural-language runs: plan → execute → evaluate → report) | **Designed, not implemented.** |
-| SPEC §16 (runner daemon, control-plane API, React web UI) | **Designed, not implemented.** |
+| SPEC §0–§14 (core harness) | Implemented. Acceptance suite criteria 1–21 green. |
+| SPEC §15 (NL runs: plan → execute → evaluate → report) | Implemented: `structured()` model calls, planner + approval gate, plan-aware actions (`plan_step`, `criterion`, `step_done`, `upload`, `assert_url`), finish nudge, evaluator, §15.5 verdict + `CANCELLED` (exit 4), `status.json`, `report.{json,md,html}`. Criteria 22–26 green. |
+| SPEC §16 (runner daemon, control-plane API, React UI) | Implemented: `npm run runner` (host, token auth, queue, docker execFile), `src/server/` control plane (`docker-compose.ui.yml`, 127.0.0.1:7070), `ui/` React+Vite SPA. Criteria 27–29 green. |
+| Live smoke, Anthropic (`anthropic/claude-opus-5-5`) | PASSED login spec and the full NL blog scenario through the UI (run `20261031-002333-6657`: 25 steps, all criteria MET, finish nudge fired once). |
+| Live smoke, OpenAI (`openai/gpt-6-astra`) | **Blocked by the key, not the code**: OpenAI returns 401 "Missing scopes: api.responses.write". The user must grant that scope or replace `./secrets/OPENAI_API_KEY`. |
 
-User decisions behind §15–16:
+To use the platform: `sh scripts/setup-test-secrets.sh`, start the runner (`npm run runner`), `docker compose -f docker-compose.ui.yml up`, open http://127.0.0.1:7070.
 
-- The control plane runs in a container and talks to a host **runner daemon** over token-authenticated HTTP. Only the runner touches Docker.
-- Plan review is an optional per-run toggle (default off).
-- The UI is a React + Vite SPA, localhost only, with no login.
+### Model calls through the control plane
 
-### Next Work: Suggested Phases for §15–16
-
-1. **Orchestrator.**
-   - Refactor provider clients to a generic `structured({system, parts, schema})` call, with `next()` built on it.
-   - Add `planner.ts`, approval polling (`/control/approval.json`), plan-aware actions (`plan_step`, `criterion`, `step_done`, `upload`, `assert_url`), `status.json`, `evaluator.ts`, the §15.5 verdict and `CANCELLED` (exit 4).
-   - Generate `report.json/md/html` with every string HTML-escaped.
-   - Fixtures: add a blog app (login, new post with image upload, publish toggle, public page) and a `hero.png` asset.
-   - Acceptance criteria 22–26.
-2. **Runner daemon** (`src/runner/`) and **control-plane API** (`src/server/`):
-   - the ui container plus compose wiring for `/run-input` and `/control`;
-   - the security guards (token, Host header, Origin, CSP sandbox on artifacts);
-   - criteria 27–28.
-3. **React SPA** (`ui/`): runs list, new-run form, run detail (live SSE, plan approval, report, video with chapter seek, screenshots), and Playwright UI end-to-end tests (criterion 29).
-4. **Live blog scenario** through the UI with a real model (criterion 30). Then the full gates, a SPEC sync and a commit.
+The runner reads `./secrets/RUNNER_TOKEN` (auto-generated on first start) and drives `docker compose` via `execFile` only — no shell. Request dirs live in `./data/requests/<run_id>/` (`request.json`, `spec.json`, `assets/`, `control/`, `stub/`). The UI writes them; the runner mounts them at `/run-input` and `/control` via a generated `compose.run.yml` overlay.
 
 ## Repository Layout
 
@@ -51,7 +36,7 @@ docker/proxy/            Squid 7 egress proxy; gen-squid-conf builds squid.conf 
 Dockerfile               orchestrator image (node:26-trixie-slim + ffmpeg + xdotool)
 docker-compose.yml       run pair (browser + orchestrator share netns/IPC/X socket) + proxy; networks sandbox (internal) / egress
 src/                     orchestrator (runs inside the container)
-  main.ts                run lifecycle (§6.6)
+  main.ts                run lifecycle (§6.6, §15: planner → approval → agent → evaluator → report)
   session.ts             CDP connect, invariant, dialog/navigation guards, popup adoption
   recorder.ts            ffmpeg x11grab
   cursor.ts              visible cursor glide
@@ -61,12 +46,22 @@ src/                     orchestrator (runs inside the container)
   egress.ts              Squid access-log parsing
   events.ts              timeline schema
   geometry.ts
-  agent/                 actions (zod + wire schema), loop, prompt (lead-authored), verdict, budget, coords, model factory
+  agent/                 actions (zod + wire schema + agentWireSchema), loop (incl. finish nudge),
+                         prompt.ts + plan-prompts.ts (LEAD-AUTHORED — do not reword without review),
+                         planner, evaluator, verdict, budget, coords, model factory, plan.ts
   agent/providers/       anthropic.ts, openai.ts (raw fetch, retries in http.ts), stub.ts
   postprocess/           timemap, zoom, chapters, duration, render, cli
+  report/                report.json/md/html (escapeHtml everywhere)
+  runner/                host daemon: token, request validation, manager (queue, execFile compose), http
+  server/                control-plane API: guards (Host/Origin/CT), form, multipart, api
+ui/                      React + Vite SPA (self-contained package, vitest tests)
+docker/ui/               ui image (multi-stage: vite build → node runtime)
+docker/e2e/              Playwright driver image for criterion 29
+docker-compose.ui.yml    separate always-on ui project (127.0.0.1:7070)
+data/                    gitignored: request dirs (requests/<run_id>/{request.json,spec.json,assets/,control/,stub/})
 scripts/run-test.sh      one run: compose up -d, docker wait, always down -v
 tests/unit/              node:test unit tests (pure modules)
-tests/acceptance/        run.ts (criteria 1–21), compose overlays, tools/ (analysis run in the orchestrator image)
+tests/acceptance/        run.ts (criteria 1–30; 29 = Playwright e2e of the real UI, 30 = live smoke), overlays, tools/
 tests/fixtures/sites/    fake internet: app.test, other.test, cdn.app.test, evil.test, llm.test, with a ground-truth request log
 tests/specs/, tests/stub/  TestSpecs and stub-model scripts used by acceptance
 spike/                   architecture and egress-proxy spikes (evidence for SPEC §13; don't modify)
@@ -134,6 +129,18 @@ artifacts/               gitignored run outputs
 - Anthropic: the API rejects `oversized_image`. `resizedSize` uses round-half-up in the probe and round-half-even for the returned edge, which matches all documented cases. Claude 4.7+ is the high-resolution tier (1920×1080 is sent unchanged).
 - Anthropic doesn't guarantee enum casing, hence `normalizeEnums`.
 - OpenAI strict mode needs every key `required`, so optional fields are nullable.
+
+**Control plane**
+
+- `POST /api/runs` requires an `Origin` header matching the UI host AND a JSON/multipart content type (CSRF guard); scripts must send `Origin: http://127.0.0.1:7070`.
+- `docker compose ... build/down` interpolates env for every service — pass dummy RUN_ID/TEST_FILE/AGENT_MODEL/AGENT_EGRESS_HOSTS for teardown or service builds.
+- The run pair's compose is invoked by the runner; UI POSTs create request dirs the runner validates and launches. Never let the UI container have the Docker socket.
+
+**Live-model behaviour**
+
+- Anthropic's `json_schema` grammar limits: ≤16 union-typed params, `minItems` only 0/1, no maxItems, compiled-grammar size cap. `agentWireSchema()` hoists `label`/`plan_step` into the turn object and enums plan ids — required, verified live.
+- Squid logs CONNECT tunnels when they CLOSE; undici keeps the model tunnel open across steps, so egress summary polls for the `:3129` line.
+- The finish nudge fires on `done: PASSED` with unproven criteria (max 2), feeding the gap back as a history entry; a rejected `done` turn has no ACTION_END.
 
 **Acceptance**
 

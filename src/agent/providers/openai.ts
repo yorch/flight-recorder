@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { TestSpec } from '../../config.ts';
 import type { Size } from '../../events.ts';
-import type { ModelClient, ModelReply, Observation, StepRecord } from '../contract.ts';
+import type { ModelClient, ModelReply, NextInput, StructuredInput } from '../contract.ts';
 import { buildUserText, systemPromptFor } from '../prompt.ts';
 import { postJson } from './http.ts';
 
@@ -60,22 +59,17 @@ export class OpenAIClient implements ModelClient {
     return imageSizeOpenAI(screen.width, screen.height);
   }
 
-  async next(input: { spec: TestSpec; observation: Observation; history: StepRecord[]; schema: object }): Promise<ModelReply> {
-    const { observation } = input;
-    const content: unknown[] = [];
-    if (observation.screenshot) {
-      content.push({
-        type: 'input_image',
-        image_url: `data:image/png;base64,${observation.screenshot.png.toString('base64')}`,
-        detail: 'original',
-      });
-    }
-    content.push({ type: 'input_text', text: buildUserText(input) });
+  async structured(input: StructuredInput): Promise<ModelReply> {
+    const content: unknown[] = input.parts.map((p) =>
+      p.type === 'image'
+        ? { type: 'input_image', image_url: `data:image/png;base64,${p.png.toString('base64')}`, detail: 'original' }
+        : { type: 'input_text', text: p.text },
+    );
     const body = {
       model: this.model,
-      instructions: systemPromptFor(observation),
+      instructions: input.system,
       input: [{ role: 'user', content }],
-      text: { format: { type: 'json_schema', name: 'agent_turn', schema: input.schema, strict: true } },
+      text: { format: { type: 'json_schema', name: input.name, schema: input.schema, strict: true } },
     };
     const data = await postJson<OpenAIResponse>(
       this.fetchFn,
@@ -98,5 +92,12 @@ export class OpenAIClient implements ModelClient {
       raw: JSON.parse(answer),
       usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 },
     };
+  }
+
+  async next(input: NextInput): Promise<ModelReply> {
+    const parts: StructuredInput['parts'] = [];
+    if (input.observation.screenshot) parts.push({ type: 'image', png: input.observation.screenshot.png });
+    parts.push({ type: 'text', text: buildUserText(input) });
+    return this.structured({ system: systemPromptFor(input.observation, input.plan), parts, schema: input.schema, name: 'agent_turn' });
   }
 }

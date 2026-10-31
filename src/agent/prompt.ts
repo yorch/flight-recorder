@@ -1,5 +1,7 @@
 import type { TestSpec } from '../config.ts';
 import type { Observation, StepRecord } from './contract.ts';
+import type { Plan } from './plan.ts';
+import { PLAN_AGENT_RULES } from './plan-prompts.ts';
 
 /**
  * The system prompt artifact (§6.2). {WIDTH}/{HEIGHT} are filled in per turn with the size of the
@@ -28,10 +30,11 @@ Additional rules:
 - assert_visual records your own visual judgment. It can fail the test but never passes it on its own.
 - If an action fails, read the error and try a different approach rather than repeating the same action.`;
 
-export function systemPromptFor(observation: Observation): string {
+export function systemPromptFor(observation: Observation, plan?: Plan): string {
   const w = observation.screenshot?.width ?? 0;
   const h = observation.screenshot?.height ?? 0;
-  return SYSTEM_PROMPT.replace('{WIDTH}', String(w)).replace('{HEIGHT}', String(h));
+  const prompt = SYSTEM_PROMPT.replace('{WIDTH}', String(w)).replace('{HEIGHT}', String(h));
+  return plan ? `${prompt}\n\n${PLAN_AGENT_RULES}` : prompt;
 }
 
 const describeStep = (h: StepRecord): string => {
@@ -40,8 +43,14 @@ const describeStep = (h: StepRecord): string => {
 };
 
 /** Shared user-turn text used by both providers. Contains no secret values, only placeholder names. */
-export function buildUserText(input: { spec: TestSpec; observation: Observation; history: StepRecord[] }): string {
-  const { spec, observation: o, history } = input;
+export function buildUserText(input: {
+  spec: TestSpec;
+  observation: Observation;
+  history: StepRecord[];
+  plan?: Plan;
+  planStatus?: Record<string, string>;
+}): string {
+  const { spec, observation: o, history, plan, planStatus } = input;
   const secrets = Object.keys(spec.secrets ?? {});
   const lines = [
     `Goal: ${spec.goal}`,
@@ -51,6 +60,15 @@ export function buildUserText(input: { spec: TestSpec; observation: Observation;
     `URL: ${o.url}`,
     `Title: ${o.title}`,
   ];
+  if (spec.assets?.length) lines.push(`Available files: ${spec.assets.join(', ')}`);
+  if (plan) {
+    lines.push(`Test plan: ${plan.title}`);
+    lines.push(
+      'Plan steps:',
+      ...plan.steps.map((st) => `- ${st.id} ${st.intent} [${planStatus?.[st.id] ?? 'open'}] (expected: ${st.expected})`),
+    );
+    lines.push('Criteria:', ...plan.criteria.map((c) => `- ${c.id} ${c.description}`));
+  }
   if (o.dialog) {
     lines.push(`Dialog open (${o.dialog.type}): ${o.dialog.message}`, `Default value: ${o.dialog.default_value}`);
     lines.push('A dialog is open: respond with a dialog action.');

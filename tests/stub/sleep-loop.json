@@ -1,0 +1,236 @@
+{
+  "turns": [
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 1",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 2",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 3",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 4",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 5",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 6",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 7",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 8",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 9",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 10",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 11",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 12",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 13",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 14",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 15",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 16",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 17",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 18",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 19",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 20",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 21",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 22",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 23",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 24",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "sleep_ms": 3000,
+      "action": {
+        "kind": "assert_url",
+        "label": "wait 25",
+        "plan_step": "p1",
+        "matches": "^https?://"
+      }
+    },
+    {
+      "action": {
+        "kind": "done",
+        "status": "PASSED",
+        "summary": "slept through"
+      }
+    }
+  ]
+}
