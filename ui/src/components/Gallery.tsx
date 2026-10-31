@@ -1,75 +1,49 @@
-import { useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Report } from '../lib/api.ts';
-import { screenshotUrl } from '../lib/api.ts';
+import { baseName, flattenGroups, groupScreenshots } from '../lib/gallery.ts';
+import { Lightbox } from './Lightbox.tsx';
 
-interface Group {
-  label: string;
-  paths: string[];
-}
+export { groupScreenshots } from '../lib/gallery.ts';
 
-/** Groups screenshots by owning plan step (report data) with a flat fallback. */
-export function groupScreenshots(report: Report | null, names: string[]): Group[] {
-  if (report?.plan) {
-    const groups: Group[] = [];
-    const seen = new Set<string>();
-    for (const s of report.plan.steps) {
-      if (s.screenshots.length) {
-        groups.push({ label: `${s.id} — ${s.intent}`, paths: s.screenshots });
-        for (const p of s.screenshots) seen.add(p);
-      }
-    }
-    const rest = report.artifacts.screenshots.filter((p) => !seen.has(p));
-    if (rest.length) groups.push({ label: 'other', paths: rest });
-    return groups;
-  }
-  if (names.length) return [{ label: 'all', paths: names.map((n) => `screenshots/${n}`) }];
-  return [];
-}
-
+/** §16.3 screenshot gallery grouped by plan step, with a navigable lightbox. */
 export function Gallery({ runId, report, names }: { runId: string; report: Report | null; names: string[] }) {
-  const [lightbox, setLightbox] = useState<string | null>(null);
-  const dialog = useRef<HTMLDialogElement | null>(null);
-  const opener = useRef<HTMLButtonElement | null>(null);
-  const close = () => {
-    dialog.current?.close();
-    setLightbox(null);
-    opener.current?.focus();
-  };
-  const groups = groupScreenshots(report, names);
+  const [index, setIndex] = useState<number | null>(null);
+  const groups = useMemo(() => groupScreenshots(report, names), [report, names]);
+  const shots = useMemo(() => flattenGroups(runId, groups), [runId, groups]);
   if (groups.length === 0) return null;
+  let n = 0;
   return (
     <section className="panel" data-testid="gallery">
-      <h3>Screenshots</h3>
+      <div className="row spread">
+        <h3>Screenshots</h3>
+        <span className="muted small">{shots.length} captured</span>
+      </div>
       {groups.map((g) => (
         <div key={g.label}>
           <h4 className="muted">{g.label}</h4>
           <div className="gallery">
-            {g.paths.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className="thumb"
-                onClick={(e) => {
-                  opener.current = e.currentTarget;
-                  setLightbox(screenshotUrl(runId, p));
-                  dialog.current?.showModal();
-                }}
-              >
-                <img src={screenshotUrl(runId, p)} alt={p} loading="lazy" />
-              </button>
-            ))}
+            {g.paths.map((p) => {
+              const at = n++;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  className="thumb"
+                  aria-label={`Open screenshot ${at + 1} of ${shots.length}: ${baseName(p)}`}
+                  onClick={(e) => {
+                    e.currentTarget.focus();
+                    setIndex(at);
+                  }}
+                >
+                  <img src={shots[at]?.src} alt={p} loading="lazy" />
+                  <span className="thumb-index mono">{at + 1}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}
-      <dialog ref={dialog} className="lightbox" aria-label="Screenshot preview" onCancel={close}>
-        <div className="row spread">
-          <span>Screenshot preview</span>
-          <button type="button" className="btn" onClick={close}>
-            Close preview
-          </button>
-        </div>
-        {lightbox && <img src={lightbox} alt="Expanded browser screenshot" />}
-      </dialog>
+      <Lightbox shots={shots} index={index} onIndex={setIndex} />
     </section>
   );
 }

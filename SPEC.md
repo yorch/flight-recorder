@@ -1437,6 +1437,7 @@ export const activeChapter = (chapters: Chapter[], t: number): Chapter | null =>
 artifacts/<run_id>/
   run.json                  # status, summary, timings, Chrome/Playwright/model versions
   events.jsonl              # §4
+  network.jsonl             # browser request/response log, headers only, no bodies (§15.6)
   raw.mkv                   # unedited capture
   final.mp4                 # condensed, zoomed output
   chapters.json             # §8
@@ -1725,6 +1726,7 @@ The evaluator can only downgrade a run: its `MET` never passes a criterion witho
   - the issues, the conclusions and the egress summary;
   - the artifact paths: `final.mp4`, `raw.mkv`, `chapters.vtt` and the screenshots.
 - **`report.md` and `report.html`** are generated from `report.json`. `report.html` is self-contained: inline CSS and no scripts. It embeds `<video src="final.mp4">` with `<track kind="chapters" src="chapters.vtt">`, plus a screenshot gallery. **Every string is HTML-escaped**, because the evaluator's text and page titles are untrusted.
+- **`network.jsonl`.** The browser request/response log written by the session: one JSON object per request — `{seq, t_ms, method, url, resource_type, status, ms, error, headers_out, headers_in}` (plus `cached` when served from a service worker). Headers only; request and response **bodies are never captured**, and every line passes through `redact()`. It is served by `GET /api/runs/:id/network` (§16.2).
 
 ## 16. Control Plane and Web UI
 
@@ -1765,6 +1767,7 @@ Node 26 with `node:http`. It serves the built SPA and a JSON API.
 | `GET /api/runs/:id` | Request, spec, runner state, `status.json`, `run.json`, plan, evaluation, report, an events summary and a `progress` snapshot. |
 | `GET /api/runs/:id/events` | Server-sent events: tail of `events.jsonl` plus `status.json` changes and `progress` snapshots (`retry: 3000`; the stream ends with a `done` event carrying `run.json`). |
 | `GET /api/runs/:id/screenshots` | Screenshot file names (for the live view and gallery). |
+| `GET /api/runs/:id/network` | Entries from `network.jsonl` (`source: 'cdp'`, capped at 5000 with a `truncated` flag), falling back to the proxy access log (`source: 'proxy'`) when it is missing or empty; `source: 'none'` when neither exists. |
 | `POST /api/runs/:id/approve` | `{ plan? }`; writes `control/approval.json`. |
 | `POST /api/runs/:id/reject` | Writes a reject decision. |
 | `POST /api/runs/:id/cancel` | Cancels through the runner. |

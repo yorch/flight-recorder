@@ -35,29 +35,28 @@ export const badgeForRow = (row: Pick<RunRow, 'status'>): Badge => badgeOf(row.s
 
 export const isTerminalRow = (row: Pick<RunRow, 'status'>): boolean => badgeOf(row.status).terminal;
 
-export const FILTERABLE = [
-  'all',
-  'queued',
-  'planning',
-  'awaiting_approval',
-  'running',
-  'evaluating',
-  'postprocessing',
-  'passed',
-  'failed',
-  'unverified',
-  'cancelled',
-] as const;
+/** Virtual status groups usable as a status filter (stat tiles on the runs list). */
+export const STATUS_GROUPS: Record<string, { label: string; match: (cls: string) => boolean }> = {
+  active: { label: 'in progress', match: (cls) => !TERMINAL.has(cls) },
+  attention: { label: 'needs attention', match: (cls) => ['failed', 'unverified', 'awaiting_approval'].includes(cls) },
+};
 
-export function matchesFilter(row: RunRow, filter: string): boolean {
-  if (filter === 'all') return true;
-  return badgeOf(row.status).cls === filter;
+export function matchesStatus(status: string | null | undefined, want: string): boolean {
+  const cls = badgeOf(status).cls;
+  return STATUS_GROUPS[want]?.match(cls) ?? cls === want;
+}
+
+export const statusLabel = (f: string): string => STATUS_GROUPS[f]?.label ?? f.replaceAll('_', ' ');
+
+export function durationMs(started: string | null, ended: string | null, now = Date.now()): number | null {
+  if (!started) return null;
+  const ms = (ended ? Date.parse(ended) : now) - Date.parse(started);
+  return Number.isNaN(ms) || ms < 0 ? null : ms;
 }
 
 export function fmtDuration(started: string | null, ended: string | null, now = Date.now()): string {
-  if (!started) return '—';
-  const ms = (ended ? Date.parse(ended) : now) - Date.parse(started);
-  if (Number.isNaN(ms) || ms < 0) return '—';
+  const ms = durationMs(started, ended, now);
+  if (ms === null) return '—';
   const s = ms / 1000;
   if (s < 60) return `${s.toFixed(1)}s`;
   const m = Math.floor(s / 60);

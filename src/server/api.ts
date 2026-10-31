@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { parsePlan } from '../agent/plan.ts';
+import { networkEntries } from '../network.ts';
 import { RUN_ID_RE } from '../runner/request.ts';
 import { buildSpec, FormError, newRunId, type RunForm, resolveModel, stubScriptText } from './form.ts';
 import { ARTIFACT_CSP, contentTypeFor, hostAllowed, mutationGuard, resolveUnder } from './guards.ts';
@@ -80,6 +81,14 @@ const readJsonFile = (file: string): unknown => {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
     return undefined;
+  }
+};
+
+const readText = (file: string): string | null => {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
   }
 };
 
@@ -602,7 +611,7 @@ export function createApiHandler(deps: ServerDeps) {
       if (p === '/api/secrets' && req.method === 'GET') return json(res, 200, { secrets: secretNames() });
       if (p === '/api/health' && req.method === 'GET') return json(res, 200, { ok: true });
 
-      const apiRun = /^\/api\/runs\/([^/]+)(?:\/(approve|reject|cancel|rerun|events|screenshots))?$/.exec(p);
+      const apiRun = /^\/api\/runs\/([^/]+)(?:\/(approve|reject|cancel|rerun|events|screenshots|network))?$/.exec(p);
       if (apiRun) {
         const [, id, sub] = apiRun;
         if (!sub && req.method === 'GET') return json(res, 200, await runDetail(id));
@@ -619,6 +628,15 @@ export function createApiHandler(deps: ServerDeps) {
             /* no screenshots dir yet */
           }
           return json(res, 200, { screenshots: shots });
+        }
+        if (sub === 'network' && req.method === 'GET') {
+          requireRunDir(id);
+          const art = artDir(id);
+          return json(
+            res,
+            200,
+            networkEntries(readText(path.join(art, 'network.jsonl')), readText(path.join(art, 'logs', 'proxy-access.log'))),
+          );
         }
         if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
         if (sub === 'approve' || sub === 'reject') {

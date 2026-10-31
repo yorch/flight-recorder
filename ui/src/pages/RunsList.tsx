@@ -1,13 +1,71 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { type Column, DataTable } from '../components/DataTable.tsx';
 import { StatusBadge } from '../components/StatusBadge.tsx';
 import { apiGet, type RunRow } from '../lib/api.ts';
-import { FILTERABLE, fmtDateTime, fmtDuration, isTerminalRow, matchesFilter } from '../lib/status.ts';
+import { badgeOf, durationMs, fmtDateTime, fmtDuration, isTerminalRow, matchesStatus, statusLabel } from '../lib/status.ts';
+import { emptyState, type TableState } from '../lib/table.ts';
+import { useTableState } from '../lib/useTableState.ts';
+
+const created = (r: RunRow) => r.started_at ?? r.submitted_at;
+const tsOf = (iso: string | null) => (iso ? Date.parse(iso) : null);
+
+export const RUN_COLUMNS: Column<RunRow>[] = [
+  {
+    key: 'status',
+    label: 'Status',
+    value: (r) => badgeOf(r.status).cls,
+    facet: (r) => badgeOf(r.status).cls,
+    facetLabel: statusLabel,
+    filter: 'select',
+    matches: (r, want) => matchesStatus(r.status, want),
+    render: (r) => <StatusBadge status={r.status} />,
+  },
+  {
+    key: 'title',
+    label: 'Title',
+    value: (r) => r.title ?? r.run_id,
+    filter: 'text',
+    render: (r) => (
+      <>
+        <a href={`#/run/${r.run_id}`}>{r.title ?? r.run_id}</a>
+        <div className="muted small">{r.run_id}</div>
+      </>
+    ),
+  },
+  { key: 'model', label: 'Model', value: (r) => r.model, filter: 'select', className: 'mono' },
+  {
+    key: 'created',
+    label: 'Created',
+    value: (r) => tsOf(created(r)),
+    className: 'mono',
+    searchable: false,
+    render: (r) => fmtDateTime(created(r)),
+  },
+  {
+    key: 'duration',
+    label: 'Duration',
+    value: (r) => durationMs(created(r), r.ended_at),
+    className: 'mono num',
+    searchable: false,
+    render: (r) => fmtDuration(created(r), r.ended_at),
+  },
+  { key: 'steps', label: 'Steps', value: (r) => r.steps, className: 'mono num', searchable: false, render: (r) => r.steps ?? '—' },
+  {
+    key: 'tokens',
+    label: 'Tokens',
+    value: (r) => (r.tokens ? (r.tokens.input ?? 0) + (r.tokens.output ?? 0) : null),
+    className: 'mono num',
+    searchable: false,
+    render: (r) => (r.tokens ? `${r.tokens.input ?? 0}/${r.tokens.output ?? 0}` : '—'),
+  },
+];
+
+const haystack = (r: RunRow) => `${r.title ?? ''} ${r.run_id} ${r.model ?? ''} ${r.status} ${r.summary ?? ''}`;
 
 export function RunsList() {
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<string>('all');
+  const [state, setState] = useTableState('');
   const timer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -37,9 +95,14 @@ export function RunsList() {
     };
   }, [load]);
 
-  const visible = (runs ?? []).filter(
-    (r) => matchesFilter(r, filter) && `${r.title ?? ''} ${r.run_id} ${r.model ?? ''}`.toLowerCase().includes(query.toLowerCase()),
-  );
+  const statusFilter = (status: string | null): TableState => ({ ...emptyState(), sort: state.sort, filters: status ? { status } : {} });
+  const count = (pred: (r: RunRow) => boolean) => (runs ? runs.filter(pred).length : '—');
+  const stats: { label: string; value: number | string; filter: string | null }[] = [
+    { label: 'Total runs', value: runs?.length ?? '—', filter: null },
+    { label: 'In progress', value: count((r) => matchesStatus(r.status, 'active')), filter: 'active' },
+    { label: 'Passed', value: count((r) => matchesStatus(r.status, 'passed')), filter: 'passed' },
+    { label: 'Needs attention', value: count((r) => matchesStatus(r.status, 'attention')), filter: 'attention' },
+  ];
 
   return (
     <section>
@@ -49,52 +112,20 @@ export function RunsList() {
           <h2>Test runs</h2>
           <p className="muted">Monitor agents, review evidence, and investigate outcomes.</p>
         </div>
-        <div className="row">
-          <label htmlFor="status-filter">Status</label>
-          <select id="status-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
-            {FILTERABLE.map((f) => (
-              <option key={f} value={f}>
-                {f.replaceAll('_', ' ')}
-              </option>
-            ))}
-          </select>
-          <a className="btn primary" href="#/new">
-            New run
-          </a>
-        </div>
+        <a className="btn primary" href="#/new">
+          New run
+        </a>
       </div>
       <div className="stats">
-        <div>
-          <span>Total runs</span>
-          <strong>{runs?.length ?? '—'}</strong>
-        </div>
-        <div>
-          <span>In progress</span>
-          <strong>{runs ? runs.filter((r) => !isTerminalRow(r)).length : '—'}</strong>
-        </div>
-        <div>
-          <span>Passed</span>
-          <strong>{runs ? runs.filter((r) => r.status.toLowerCase() === 'passed').length : '—'}</strong>
-        </div>
-        <div>
-          <span>Needs attention</span>
-          <strong>
-            {runs ? runs.filter((r) => ['failed', 'unverified', 'awaiting_approval'].includes(r.status.toLowerCase())).length : '—'}
-          </strong>
-        </div>
-      </div>
-      <div className="toolbar">
-        <input
-          type="search"
-          aria-label="Search runs"
-          placeholder="Search title, run ID, or model…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <span className="muted small">{visible.length} runs · auto-refresh enabled</span>
-        <button type="button" className="btn" onClick={() => void load()}>
-          Refresh
-        </button>
+        {stats.map((s) => {
+          const active = (state.filters.status ?? null) === s.filter && !state.q;
+          return (
+            <button key={s.label} type="button" className="stat" aria-pressed={active} onClick={() => setState(statusFilter(s.filter))}>
+              <span>{s.label}</span>
+              <strong>{s.value}</strong>
+            </button>
+          );
+        })}
       </div>
       {error && (
         <div className="banner error" role="alert">
@@ -106,51 +137,37 @@ export function RunsList() {
           Loading runs…
         </div>
       )}
-      {runs !== null && visible.length === 0 && (
+      {runs !== null && runs.length === 0 && (
         <div className="empty-state">
-          <h3>{runs.length ? 'No matching runs' : 'Your first test starts here'}</h3>
-          <p className="muted">
-            {runs.length ? 'Try another search or status filter.' : 'Give an agent a goal and collect a complete record of the result.'}
-          </p>
+          <h3>Your first test starts here</h3>
+          <p className="muted">Give an agent a goal and collect a complete record of the result.</p>
           <a className="btn" href="#/new">
             Create a run
           </a>
         </div>
       )}
-      {visible.length > 0 && (
-        <div className="table-wrap">
-          <table className="runs">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Title</th>
-                <th>Model</th>
-                <th>Created</th>
-                <th>Duration</th>
-                <th>Steps</th>
-                <th>Tokens</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((r) => (
-                <tr key={r.run_id}>
-                  <td>
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td>
-                    <a href={`#/run/${r.run_id}`}>{r.title ?? r.run_id}</a>
-                    <div className="muted small">{r.run_id}</div>
-                  </td>
-                  <td className="mono">{r.model ?? '—'}</td>
-                  <td className="mono">{fmtDateTime(r.started_at ?? r.submitted_at)}</td>
-                  <td className="mono">{fmtDuration(r.started_at ?? r.submitted_at, r.ended_at)}</td>
-                  <td className="mono">{r.steps ?? '—'}</td>
-                  <td className="mono">{r.tokens ? `${r.tokens.input ?? 0}/${r.tokens.output ?? 0}` : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {runs !== null && runs.length > 0 && (
+        <DataTable
+          label="Test runs"
+          noun="runs"
+          search="Search title, run ID, model, or status…"
+          columns={RUN_COLUMNS}
+          rows={runs}
+          rowKey={(r) => r.run_id}
+          state={state}
+          onState={setState}
+          haystack={haystack}
+          className="runs"
+          testId="runs-table"
+          toolbarExtra={
+            <>
+              <span className="muted small">auto-refresh enabled</span>
+              <button type="button" className="btn" onClick={() => void load()}>
+                Refresh
+              </button>
+            </>
+          }
+        />
       )}
     </section>
   );

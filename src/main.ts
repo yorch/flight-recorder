@@ -15,6 +15,7 @@ import { summarizeAccessLog } from './egress.ts';
 import type { RunStatus, Status } from './events.ts';
 import { EventLog } from './events.ts';
 import { InteractionEngine } from './interaction.ts';
+import { NetworkLog } from './network.ts';
 import type { Chapter } from './postprocess/chapters.ts';
 import { runPostprocess } from './postprocess/render.ts';
 import { ScreenRecorder } from './recorder.ts';
@@ -97,6 +98,7 @@ async function main(): Promise<number> {
 
   const startedAt = new Date().toISOString();
   const log = new EventLog(path.join(runDir, 'events.jsonl'));
+  const network = new NetworkLog(path.join(runDir, 'network.jsonl'));
   const recorder = new ScreenRecorder({ display: cfg.display, width: cfg.screen.width, height: cfg.screen.height, fps: 30 });
   const budget = new Budget({ timeout_s: spec.timeout_s, max_model_tokens: spec.max_model_tokens });
 
@@ -176,7 +178,7 @@ async function main(): Promise<number> {
     if (status !== 'CANCELLED') {
       writeStatus('running');
       try {
-        session = await Session.connect(cfg.cdpUrl, cfg.screen, spec.allowed_origins, (u) => isAllowedOrigin(u, spec));
+        session = await Session.connect(cfg.cdpUrl, cfg.screen, spec.allowed_origins, (u) => isAllowedOrigin(u, spec), network);
         chromeVersion = session.browser.version();
         log.emit({
           type: 'RUN_START',
@@ -319,6 +321,7 @@ async function main(): Promise<number> {
       await recorder.stop();
       log.emit({ type: 'RECORDING_STOP' });
     } finally {
+      await network.close();
       await log.close();
     }
   }

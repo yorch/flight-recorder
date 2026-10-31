@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunRow } from './api.ts';
-import { badgeOf, fmtDuration, isTerminalRow, matchesFilter } from './status.ts';
+import { badgeOf, durationMs, fmtDuration, isTerminalRow, matchesStatus, statusLabel } from './status.ts';
 
 const row = (status: string): RunRow => ({
   run_id: '20261030-120000-aaaa',
@@ -50,12 +50,21 @@ describe('badgeOf (status merge display)', () => {
   });
 });
 
-describe('matchesFilter', () => {
-  it('all passes everything; named filters match the badge class', () => {
-    expect(matchesFilter(row('FAILED'), 'all')).toBe(true);
-    expect(matchesFilter(row('FAILED'), 'failed')).toBe(true);
-    expect(matchesFilter(row('FAILED'), 'running')).toBe(false);
-    expect(matchesFilter(row('awaiting_approval'), 'awaiting_approval')).toBe(true);
+describe('matchesStatus', () => {
+  it('matches the badge class, case-insensitively', () => {
+    expect(matchesStatus('FAILED', 'failed')).toBe(true);
+    expect(matchesStatus('FAILED', 'running')).toBe(false);
+    expect(matchesStatus('awaiting_approval', 'awaiting_approval')).toBe(true);
+    expect(matchesStatus(row('weird').status, 'submitted')).toBe(true);
+  });
+  it('supports the virtual active / attention groups', () => {
+    expect(matchesStatus('running', 'active')).toBe(true);
+    expect(matchesStatus('PASSED', 'active')).toBe(false);
+    expect(matchesStatus('UNVERIFIED', 'attention')).toBe(true);
+    expect(matchesStatus('awaiting_approval', 'attention')).toBe(true);
+    expect(matchesStatus('PASSED', 'attention')).toBe(false);
+    expect(statusLabel('active')).toBe('in progress');
+    expect(statusLabel('awaiting_approval')).toBe('awaiting approval');
   });
 });
 
@@ -68,5 +77,8 @@ describe('fmtDuration', () => {
     expect(fmtDuration(t0, t2)).toBe('1m 09s');
     expect(fmtDuration(t0, null, Date.parse(t1))).toBe('9.2s');
     expect(fmtDuration(null, null)).toBe('—');
+    expect(durationMs(t0, t1)).toBe(9200);
+    expect(durationMs(t1, t0)).toBeNull();
+    expect(durationMs('nope', t0)).toBeNull();
   });
 });

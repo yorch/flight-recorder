@@ -1,4 +1,7 @@
+import { useMemo } from 'react';
 import type { TimelineEvent } from '../lib/api.ts';
+import { useTableState } from '../lib/useTableState.ts';
+import { type Column, DataTable } from './DataTable.tsx';
 
 const ROW_TYPES = new Set([
   'RUN_START',
@@ -11,11 +14,51 @@ const ROW_TYPES = new Set([
   'RUN_END',
 ]);
 
+export const timelineRows = (events: TimelineEvent[]): TimelineEvent[] => events.filter((e) => ROW_TYPES.has(e.type));
+
+const haystack = (e: TimelineEvent) =>
+  `${e.type} ${e.step_id ?? ''} ${e.plan_step ?? ''} ${e.label ?? e.action ?? e.summary ?? ''} ${e.status ?? ''} ${e.error ?? ''}`;
+
 export function Timeline({ events, maxRows }: { events: TimelineEvent[]; maxRows?: number }) {
-  const rows = events.filter((e) => ROW_TYPES.has(e.type));
-  if (rows.length === 0) return null;
-  const shown = maxRows === undefined ? rows : rows.slice(-maxRows);
+  const [state, setState] = useTableState('tl');
+  const rows = useMemo(() => timelineRows(events), [events]);
   const t0 = rows[0]?.t_ms ?? 0;
+  const shown = useMemo(() => (maxRows === undefined ? rows : rows.slice(-maxRows)), [rows, maxRows]);
+  const columns = useMemo<Column<TimelineEvent>[]>(
+    () => [
+      {
+        key: 't',
+        label: 't',
+        value: (e) => e.t_ms,
+        className: 'mono num',
+        render: (e) => `${((e.t_ms - t0) / 1000).toFixed(1)}s`,
+        searchable: false,
+      },
+      { key: 'kind', label: 'Kind', value: (e) => e.type, filter: 'select', className: 'mono small' },
+      { key: 'step', label: 'Step', value: (e) => e.step_id ?? e.plan_step ?? '', className: 'mono' },
+      {
+        key: 'label',
+        label: 'Label',
+        value: (e) => e.label ?? e.action ?? e.summary ?? e.test ?? '',
+        filter: 'text',
+        render: (e) => (
+          <>
+            {e.label ?? e.action ?? e.summary ?? e.test ?? ''}
+            {e.error && <div className="warn small">{e.error}</div>}
+          </>
+        ),
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        value: (e) => e.status,
+        filter: 'select',
+        render: (e) => e.status && <span className={`chip chip-${e.status.toLowerCase()}`}>{e.status}</span>,
+      },
+    ],
+    [t0],
+  );
+  if (rows.length === 0) return null;
   return (
     <section className="panel" data-testid="timeline">
       <h3>Timeline</h3>
@@ -24,33 +67,17 @@ export function Timeline({ events, maxRows }: { events: TimelineEvent[]; maxRows
           last {shown.length} of {rows.length} events
         </p>
       )}
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>t</th>
-              <th>Kind</th>
-              <th>Step</th>
-              <th>Label</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((e) => (
-              <tr key={e.seq}>
-                <td className="mono">{((e.t_ms - t0) / 1000).toFixed(1)}s</td>
-                <td className="mono small">{e.type}</td>
-                <td className="mono">{e.step_id ?? e.plan_step ?? ''}</td>
-                <td>
-                  {e.label ?? e.action ?? e.summary ?? e.test ?? ''}
-                  {e.error && <div className="warn small">{e.error}</div>}
-                </td>
-                <td>{e.status && <span className={`chip chip-${e.status.toLowerCase()}`}>{e.status}</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Event timeline"
+        noun="events"
+        search="Search events…"
+        columns={columns}
+        rows={shown}
+        rowKey={(e) => e.seq}
+        state={state}
+        onState={setState}
+        haystack={haystack}
+      />
     </section>
   );
 }

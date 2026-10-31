@@ -351,6 +351,53 @@ describe('api handler over a real http server', () => {
     assert.equal((await api('GET', `/artifacts/${id}/nope.png`)).code, 404);
   });
 
+  it('GET /api/runs/:id/network serves network.jsonl, falls back to the proxy log, then none', async () => {
+    const id = fs.readdirSync(path.join(dataDir, 'requests'))[0];
+    const art = path.join(artifactsDir, id);
+    fs.mkdirSync(path.join(art, 'logs'), { recursive: true });
+    const entry = {
+      seq: 0,
+      t_ms: 1,
+      method: 'GET',
+      url: 'http://app.test/',
+      resource_type: 'document',
+      status: 200,
+      ms: 9,
+      error: null,
+      headers_out: { accept: 'text/html' },
+      headers_in: { 'content-type': 'text/html' },
+    };
+    fs.writeFileSync(path.join(art, 'network.jsonl'), `${JSON.stringify(entry)}\n`);
+    fs.writeFileSync(
+      path.join(art, 'logs', 'proxy-access.log'),
+      '1761800000.123 172.18.0.2 172.18.0.3:3128 GET http://app.test/x 200 TCP_MISS\n',
+    );
+    const cdp = JSON.parse((await api('GET', `/api/runs/${id}/network`)).body) as {
+      source: string;
+      truncated: boolean;
+      entries: { url: string; status: number }[];
+    };
+    assert.equal(cdp.source, 'cdp');
+    assert.equal(cdp.truncated, false);
+    assert.equal(cdp.entries.length, 1);
+    assert.equal(cdp.entries[0].url, 'http://app.test/');
+    fs.rmSync(path.join(art, 'network.jsonl'));
+    const proxy = JSON.parse((await api('GET', `/api/runs/${id}/network`)).body) as {
+      source: string;
+      entries: { method: string; status: number; squid_result: string; resource_type: null }[];
+    };
+    assert.equal(proxy.source, 'proxy');
+    assert.equal(proxy.entries.length, 1);
+    assert.equal(proxy.entries[0].squid_result, 'TCP_MISS');
+    assert.equal(proxy.entries[0].resource_type, null);
+    fs.rmSync(path.join(art, 'logs', 'proxy-access.log'));
+    const none = JSON.parse((await api('GET', `/api/runs/${id}/network`)).body) as { source: string; entries: unknown[] };
+    assert.equal(none.source, 'none');
+    assert.deepEqual(none.entries, []);
+    assert.equal((await api('GET', '/api/runs/20261030-123456-ffff/network')).code, 404);
+    assert.equal((await api('POST', `/api/runs/${id}/network`, { body: {} })).code, 404);
+  });
+
   it('streams events.jsonl over SSE and ends on run.json', async () => {
     const id = fs.readdirSync(path.join(dataDir, 'requests'))[0];
     const art = path.join(artifactsDir, id);

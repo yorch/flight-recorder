@@ -4,7 +4,9 @@ import { useRoute } from './lib/router.ts';
 import { NewRun } from './pages/NewRun.tsx';
 import { RunDetailPage } from './pages/RunDetail.tsx';
 import { RunsList } from './pages/RunsList.tsx';
-import './app.css';
+import './styles/tokens.css';
+import './styles/app.css';
+import './styles/data.css';
 
 function App() {
   const route = useRoute();

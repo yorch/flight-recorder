@@ -1,0 +1,46 @@
+/* Design tokens (single source): surfaces, type scale, spacing, status palette. */
+/* Workspace tokens: neutral surfaces, restrained indigo, semantic status accents. */
+:where(:root) {
+  color-scheme: dark;
+  font-size: 14px;
+  --bg: #0d1017;
+  --panel: #141923;
+  --panel2: #1b2230;
+  --border: #2b3444;
+  --text: #e6eaf2;
+  --muted: #9ba8bc;
+  --accent: #a4b4ff;
+  --ok: #72d6a1;
+  --bad: #ff969d;
+  --warn: #eac47c;
+  --info: #c0abff;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --type-xs: 0.78rem;
+  --type-sm: 0.88rem;
+  --type-base: 1rem;
+  --type-title: 1.8rem;
+  --status-submitted: #a8b4c7;
+  --status-queued: #a8b4c7;
+  --status-starting: #a4b4ff;
+  --status-planning: #c0abff;
+  --status-awaiting-approval: #eac47c;
+  --status-running: #8bbfff;
+  --status-evaluating: #c0abff;
+  --status-postprocessing: #a4b4ff;
+  --status-exited: #a8b4c7;
+  --status-passed: #72d6a1;
+  --status-failed: #ff969d;
+  --status-unverified: #eac47c;
+  --status-cancelled: #a8b4c7;
+  --row-hover: #18202d;
+  --row-bad: #2a1a20;
+  --surface-sunken: #080b10;
+  line-height: 1.5;
+}

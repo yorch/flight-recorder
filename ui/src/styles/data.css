@@ -1,0 +1,348 @@
+/* Data tables (sorting, filters, expandable rows), screenshot lightbox and the HTTP requests panel. */
+:where(.sr-only) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:where(.data-table .toolbar) {
+  flex-wrap: wrap;
+  margin: var(--space-3) 0 0;
+}
+:where(.table-count) {
+  font-variant-numeric: tabular-nums;
+}
+:where(td.num) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sortable headers: the whole label is the button; indicator is a CSS triangle pair. */
+:where(th[aria-sort]) {
+  padding: 0;
+}
+:where(.sort-btn) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+:where(.sort-btn:hover) {
+  color: var(--text);
+}
+:where(th[aria-sort="ascending"] .sort-btn),
+:where(th[aria-sort="descending"] .sort-btn) {
+  color: var(--accent);
+}
+:where(.sort-ind) {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0.45;
+}
+:where(.sort-ind)::before,
+:where(.sort-ind)::after {
+  content: "";
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+:where(.sort-ind)::before {
+  border-bottom: 4px solid currentColor;
+}
+:where(.sort-ind)::after {
+  border-top: 4px solid currentColor;
+}
+:where(.sort-ind[data-dir="asc"]),
+:where(.sort-ind[data-dir="desc"]) {
+  opacity: 1;
+}
+:where(.sort-ind[data-dir="asc"])::after,
+:where(.sort-ind[data-dir="desc"])::before {
+  visibility: hidden;
+}
+:where(.filter-row td) {
+  padding: 0 8px 8px;
+  background: #191f2b;
+  border-bottom: 1px solid var(--border);
+  text-transform: none;
+  letter-spacing: 0;
+}
+:where(.filter-row select),
+:where(.filter-row input[type="search"]) {
+  width: 100%;
+  min-width: 90px;
+  padding: 5px 7px;
+  font-size: var(--type-xs);
+  background: var(--panel);
+}
+:where(tbody tr:hover td) {
+  background: var(--row-hover);
+}
+:where(tr.row-bad td) {
+  background: var(--row-bad);
+}
+:where(.empty-row td) {
+  text-align: center;
+  padding: 24px;
+}
+:where(.col-toggle) {
+  width: 34px;
+  padding-right: 0;
+}
+:where(.expand-btn) {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel2);
+  cursor: pointer;
+  position: relative;
+}
+:where(.expand-btn)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translate(-1px, -1px) rotate(-45deg);
+}
+:where(.expand-btn[aria-expanded="true"])::after {
+  transform: translate(0, -2px) rotate(45deg);
+}
+:where(.detail-row td) {
+  background: var(--surface-sunken);
+}
+:where(.link-btn) {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  cursor: zoom-in;
+}
+:where(.link-btn:hover) {
+  text-decoration: underline;
+}
+:where(.evidence-shots) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+
+/* Gallery thumbnails carry their position in the sequence. */
+:where(.thumb) {
+  position: relative;
+}
+:where(.thumb-index) {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: #0d1017cc;
+  color: var(--text);
+  font-size: var(--type-xs);
+}
+
+/* Lightbox: caption bar, stage with prev/next, filmstrip rail. */
+:where(.lightbox[open]) {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  width: min(96vw, 1700px);
+}
+:where(.lightbox-bar) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+:where(.lightbox-caption) {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+:where(.lightbox-index) {
+  font-variant-numeric: tabular-nums;
+}
+:where(.lightbox-stage img) {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+:where(.lightbox-stage) {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: var(--space-2);
+}
+:where(.lightbox-nav) {
+  height: 64px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel2);
+  cursor: pointer;
+  position: relative;
+}
+:where(.lightbox-nav:hover:not(:disabled)) {
+  border-color: var(--accent);
+}
+:where(.lightbox-nav:disabled) {
+  opacity: 0.35;
+  cursor: default;
+}
+:where(.lightbox-nav)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 10px;
+  height: 10px;
+  border-left: 2px solid var(--text);
+  border-bottom: 2px solid var(--text);
+}
+:where(.lightbox-nav.prev)::after {
+  transform: translateX(2px) rotate(45deg);
+}
+:where(.lightbox-nav.next)::after {
+  transform: translateX(-2px) rotate(-135deg);
+}
+:where(.filmstrip) {
+  display: flex;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 4px 2px 8px;
+  overflow-x: auto;
+}
+:where(.filmstrip-item) {
+  display: block;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  cursor: pointer;
+  opacity: 0.6;
+}
+:where(.filmstrip-item:hover),
+:where(.filmstrip-item[aria-current="true"]) {
+  opacity: 1;
+}
+:where(.filmstrip-item[aria-current="true"]) {
+  border-color: var(--accent);
+}
+:where(.filmstrip-item img) {
+  display: block;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+}
+:where(.lightbox-hint) {
+  margin: 0;
+}
+
+/* HTTP requests panel. */
+:where(.network-wrap) {
+  max-height: 560px;
+}
+:where(table.network thead) {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+:where(table.network td) {
+  padding: 8px 12px;
+}
+:where(td.col-url) {
+  max-width: 0;
+  width: 46%;
+}
+:where(.url-cell) {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: copy;
+}
+:where(.url-cell:hover) {
+  color: var(--accent);
+}
+:where(.copied) {
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: #123622;
+  color: var(--ok);
+  font-family: system-ui, sans-serif;
+  font-size: var(--type-xs);
+}
+:where(.chip-http-2xx) {
+  color: var(--ok);
+}
+:where(.chip-http-3xx) {
+  color: var(--accent);
+}
+:where(.chip-http-4xx),
+:where(.chip-http-pending) {
+  color: var(--warn);
+}
+:where(.chip-http-5xx),
+:where(.chip-http-failed) {
+  color: var(--bad);
+}
+:where(.request-detail h4) {
+  margin: var(--space-3) 0 var(--space-2);
+}
+:where(.wrap-any) {
+  overflow-wrap: anywhere;
+  margin: 0 0 var(--space-2);
+}
+:where(.headers) {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+:where(.headers > div) {
+  display: grid;
+  grid-template-columns: minmax(120px, 34%) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+:where(.headers dt) {
+  color: var(--muted);
+}
+:where(.headers dd) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  :where(.lightbox-stage) {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+  }
+  :where(.headers > div) {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,31 @@
-import type { LiveProgress as LiveProgressData } from '../lib/api.ts';
+import { useMemo } from 'react';
+import type { LiveProgress as LiveProgressData, LiveStepEntry } from '../lib/api.ts';
+import { useTableState } from '../lib/useTableState.ts';
+import { type Column, DataTable } from './DataTable.tsx';
+
+const STEP_COLUMNS: Column<LiveStepEntry>[] = [
+  { key: 'step', label: 'Step', value: (s) => s.step_id, className: 'mono' },
+  { key: 'kind', label: 'Kind', value: (s) => s.kind, filter: 'select', className: 'mono small' },
+  {
+    key: 'label',
+    label: 'Label',
+    value: (s) => s.label,
+    render: (s) => (
+      <>
+        {s.label}
+        {s.plan_step && <span className="muted small"> · {s.plan_step}</span>}
+        {s.error && <div className="warn small">{s.error}</div>}
+      </>
+    ),
+  },
+  {
+    key: 'result',
+    label: 'Result',
+    value: (s) => s.result,
+    filter: 'select',
+    render: (s) => <span className={`chip chip-${s.result}`}>{s.result}</span>,
+  },
+];
 
 const fmtElapsed = (s: number | null | undefined): string => {
   if (s === null || s === undefined) return '—';
@@ -15,7 +42,10 @@ export function LiveProgress({ progress, fallbackPhase }: { progress: LiveProgre
   const phase = progress?.phase ?? fallbackPhase ?? 'submitted';
   const counters = progress?.counters;
   const planSteps = progress?.plan_steps ?? [];
-  const steps = progress?.steps ?? [];
+  const steps = progress?.steps;
+  // Newest first by default; header clicks re-sort, local state (not shared in the URL).
+  const newestFirst = useMemo(() => [...(steps ?? [])].reverse(), [steps]);
+  const [state, setState] = useTableState(null);
   return (
     <section className="panel" data-testid="live-progress">
       <div className="row spread">
@@ -52,41 +82,19 @@ export function LiveProgress({ progress, fallbackPhase }: { progress: LiveProgre
           ))}
         </ul>
       )}
-      <div className="table-wrap step-log">
-        <table data-testid="step-log">
-          <thead>
-            <tr>
-              <th>Step</th>
-              <th>Kind</th>
-              <th>Label</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...steps].reverse().map((s) => (
-              <tr key={s.step_id} className={s.result === 'running' ? 'current' : ''}>
-                <td className="mono">{s.step_id}</td>
-                <td className="mono small">{s.kind}</td>
-                <td>
-                  {s.label}
-                  {s.plan_step && <span className="muted small"> · {s.plan_step}</span>}
-                  {s.error && <div className="warn small">{s.error}</div>}
-                </td>
-                <td>
-                  <span className={`chip chip-${s.result}`}>{s.result}</span>
-                </td>
-              </tr>
-            ))}
-            {steps.length === 0 && (
-              <tr>
-                <td colSpan={4} className="muted">
-                  Waiting for the first agent step…
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label="Agent step log"
+        noun="steps"
+        columns={STEP_COLUMNS}
+        rows={newestFirst}
+        rowKey={(s) => s.step_id}
+        state={state}
+        onState={setState}
+        testId="step-log"
+        wrapClassName="step-log"
+        rowClassName={(s) => (s.result === 'running' ? 'current' : '')}
+        empty="Waiting for the first agent step…"
+      />
     </section>
   );
 }

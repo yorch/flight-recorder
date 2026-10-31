@@ -643,16 +643,30 @@ const CRITERIA: Criterion[] = [
   },
   {
     id: 20,
-    title: 'run.json.egress.denied lists denied hosts; proxy log exists',
+    title: 'run.json.egress.denied lists denied hosts; proxy log and network.jsonl exist',
     run: async () => {
       const r = runTest('specs/probe.json', 'probe.json', { AGENT_EGRESS_HOSTS: 'llm.test:80' });
       const j = runJson(r.dir);
       const deniedHosts = (j.egress?.denied ?? []).map((d: { host: string }) => d.host);
       const has = (h: string) => deniedHosts.includes(h);
-      const pass = j.egress && has('evil.test:80') && has('app.test:8081') && fs.existsSync(`${r.dir}/logs/proxy-access.log`);
+      const net = fs.existsSync(`${r.dir}/network.jsonl`)
+        ? fs
+            .readFileSync(`${r.dir}/network.jsonl`, 'utf8')
+            .split('\n')
+            .filter((l) => l.trim())
+            .map((l) => JSON.parse(l) as { method?: string; url?: string; status?: number | null })
+        : [];
+      const netOk = net.some((e) => typeof e.method === 'string' && typeof e.url === 'string' && typeof e.status === 'number');
+      const pass = j.egress && has('evil.test:80') && has('app.test:8081') && fs.existsSync(`${r.dir}/logs/proxy-access.log`) && netOk;
       return {
         pass,
-        evidence: { denied: j.egress?.denied, allowed: j.egress?.allowed, logExists: fs.existsSync(`${r.dir}/logs/proxy-access.log`) },
+        evidence: {
+          denied: j.egress?.denied,
+          allowed: j.egress?.allowed,
+          logExists: fs.existsSync(`${r.dir}/logs/proxy-access.log`),
+          networkEntries: net.length,
+          networkFirst: net[0] ?? null,
+        },
       };
     },
   },
@@ -954,7 +968,7 @@ const CRITERIA: Criterion[] = [
   },
   {
     id: 28,
-    title: 'Control-plane guards: Host/Origin/Content-Type + ui container smoke (§16.2)',
+    title: 'Control-plane guards: Host/Origin/Content-Type, network endpoint + ui container smoke (§16.2)',
     run: async () => {
       const dataDir = fs.mkdtempSync('/tmp/acc-ui-data-');
       const secDir = fs.mkdtempSync('/tmp/acc-ui-sec-');
@@ -994,13 +1008,31 @@ const CRITERIA: Criterion[] = [
         ev.accepted = ok.code;
         const created = JSON.parse(ok.body || '{}') as { run_id?: string };
         ev.requestDir = created.run_id !== undefined && fs.existsSync(path.join(dataDir, 'requests', created.run_id, 'spec.json'));
+
+        // §16.2: GET /api/runs/:id/network returns the run's network.jsonl entries.
+        const netId = created.run_id ?? '';
+        const netArt = path.join(ROOT, 'artifacts', netId);
+        fs.mkdirSync(netArt, { recursive: true });
+        fs.writeFileSync(
+          path.join(netArt, 'network.jsonl'),
+          `${JSON.stringify({ seq: 0, t_ms: 1, method: 'GET', url: 'http://app.test/', resource_type: 'document', status: 200, ms: 8, error: null, headers_out: {}, headers_in: {} })}\n`,
+        );
+        const netRes = JSON.parse(
+          (await httpCall('GET', port, `/api/runs/${netId}/network`, { host: `127.0.0.1:${port}` })).body || '{}',
+        ) as { source?: string; entries?: { method?: string; url?: string; status?: number }[] };
+        ev.network = { source: netRes.source, entries: netRes.entries?.length ?? -1, first: netRes.entries?.[0] ?? null };
+        ev.networkOk =
+          netRes.source === 'cdp' &&
+          (netRes.entries ?? []).some((e) => typeof e.method === 'string' && typeof e.url === 'string' && typeof e.status === 'number');
+        fs.rmSync(netArt, { recursive: true, force: true });
         pass =
           ev.wrongHost === 421 &&
           ev.foreignOrigin === 403 &&
           ev.missingOrigin === 403 &&
           ev.textPlain === 403 &&
           ev.accepted === 201 &&
-          ev.requestDir === true;
+          ev.requestDir === true &&
+          ev.networkOk === true;
       } finally {
         await stopProc(server);
         await stopProc(fake);

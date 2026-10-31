@@ -1,5 +1,6 @@
 import { type Browser, chromium, type Dialog, type Page } from 'playwright-core';
 import type { Size } from './events.ts';
+import type { NetworkLog } from './network.ts';
 
 export class Session {
   readonly browser: Browser;
@@ -10,20 +11,35 @@ export class Session {
   private readonly screen: Size;
   private readonly allowedOrigins: string[];
   private readonly isAllowedUrl: (url: string) => boolean;
+  private readonly network: NetworkLog | null;
 
-  private constructor(browser: Browser, page: Page, screen: Size, allowedOrigins: string[], isAllowedUrl: (url: string) => boolean) {
+  private constructor(
+    browser: Browser,
+    page: Page,
+    screen: Size,
+    allowedOrigins: string[],
+    isAllowedUrl: (url: string) => boolean,
+    network: NetworkLog | null,
+  ) {
     this.browser = browser;
     this.page = page;
     this.screen = screen;
     this.allowedOrigins = allowedOrigins;
     this.isAllowedUrl = isAllowedUrl;
+    this.network = network;
   }
 
-  static async connect(cdpUrl: string, screen: Size, allowedOrigins: string[], isAllowedUrl: (url: string) => boolean): Promise<Session> {
+  static async connect(
+    cdpUrl: string,
+    screen: Size,
+    allowedOrigins: string[],
+    isAllowedUrl: (url: string) => boolean,
+    network: NetworkLog | null = null,
+  ): Promise<Session> {
     const browser = await chromium.connectOverCDP(cdpUrl);
     const context = browser.contexts()[0];
     if (!context) throw new Error('No browser context over CDP');
-    const session = new Session(browser, context.pages()[0] ?? (await context.newPage()), screen, allowedOrigins, isAllowedUrl);
+    const session = new Session(browser, context.pages()[0] ?? (await context.newPage()), screen, allowedOrigins, isAllowedUrl, network);
     await session.adopt(session.page);
     context.on('page', (page) => {
       session.adopt(page).catch((err) => {
@@ -34,6 +50,7 @@ export class Session {
   }
 
   private async adopt(page: Page): Promise<void> {
+    this.network?.attach(page); // §15.6: headers-only request/response log
     page.on('dialog', (d) => {
       if (d.type() === 'beforeunload') void d.accept();
       else this.dialog = d;
