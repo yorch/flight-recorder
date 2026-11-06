@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import type { Plan, ReportStep } from '../lib/api.ts';
 import { emptyPlan, planChanges, planProblems, renumber } from '../lib/planEdit.ts';
+import { Banner, Panel } from './Panel.tsx';
+import { Tag } from './StatusBadge.tsx';
 
 interface Props {
   plan: Plan | null;
@@ -45,32 +47,40 @@ export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable,
   if (!plan && !editable) return null;
 
   return (
-    <section className="panel" data-testid="plan-panel">
-      <h3>
-        Plan{editable ? ' — awaiting approval' : ''}
-        {editable ? (
-          <input
-            className="plan-title"
-            aria-label="plan title"
-            value={base.title}
-            onChange={(e) => setDraft({ ...base, title: e.target.value })}
-          />
-        ) : (
-          <span className="muted"> {base.title}</span>
-        )}
-      </h3>
-      {editable && <p className="approval-hint">Execution is paused. Review the steps and success criteria before approving.</p>}
-      {error && <div className="banner error">{error}</div>}
-      {editable && changes.length > 0 && <div className="muted small">{changes.length} unsaved change(s) vs submitted plan</div>}
+    <Panel
+      title={editable ? 'Plan · awaiting approval' : 'Plan'}
+      testId="plan-panel"
+      className={editable ? 'plan-panel editing' : 'plan-panel'}
+      meta={`${base.steps.length} steps · ${base.criteria.length} criteria`}
+    >
+      {editable ? (
+        <div className="field plan-title-field">
+          <label htmlFor="plan-title">Plan title</label>
+          <input id="plan-title" className="plan-title" value={base.title} onChange={(e) => setDraft({ ...base, title: e.target.value })} />
+        </div>
+      ) : (
+        <p className="plan-name">{base.title}</p>
+      )}
+      {editable && (
+        <p className="hint">
+          Execution is paused. Edit the steps and success criteria, then approve to start the browser.
+          {changes.length > 0 && <strong className="changes"> {changes.length} unsaved change(s) vs the submitted plan.</strong>}
+        </p>
+      )}
+      {error && <Banner tone="bad">{error}</Banner>}
       <div className="table-wrap">
         <table className="plan">
           <thead>
             <tr>
-              <th>Step</th>
+              <th className="col-id">Step</th>
               <th>Intent</th>
               <th>Expected</th>
-              <th>Status</th>
-              {editable && <th />}
+              <th className="col-status">Status</th>
+              {editable && (
+                <th className="col-id">
+                  <span className="sr-only">Remove</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -102,20 +112,20 @@ export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable,
                     ) : (
                       s.expected
                     )}
-                    {outcome.get(s.id)?.notes && <div className="muted small">{outcome.get(s.id)?.notes}</div>}
+                    {outcome.get(s.id)?.notes && <div className="cell-sub">{outcome.get(s.id)?.notes}</div>}
                   </td>
                   <td>
-                    <span className={`chip chip-${st.toLowerCase()}`}>{st}</span>
+                    <Tag value={st} />
                   </td>
                   {editable && (
                     <td>
                       <button
                         type="button"
-                        className="btn small"
+                        className="btn ghost small"
                         aria-label={`remove ${s.id}`}
                         onClick={() => upd({ ...base, steps: base.steps.filter((_, j) => j !== i) })}
                       >
-                        ×
+                        Remove
                       </button>
                     </td>
                   )}
@@ -128,19 +138,19 @@ export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable,
       {editable && (
         <button
           type="button"
-          className="btn small"
+          className="btn ghost small add-row"
           onClick={() => upd({ ...base, steps: [...base.steps, { id: `p${base.steps.length + 1}`, intent: '', expected: '' }] })}
         >
-          + add step
+          + Add step
         </button>
       )}
-      <h4>Criteria</h4>
+      <h3 className="sub-head">Success criteria</h3>
       <div className="table-wrap">
         <table className="plan">
           <tbody>
             {base.criteria.map((c, i) => (
               <tr key={c.id}>
-                <td className="mono">{c.id}</td>
+                <td className="mono col-id">{c.id}</td>
                 <td>
                   {editable ? (
                     <textarea
@@ -154,14 +164,14 @@ export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable,
                   )}
                 </td>
                 {editable && (
-                  <td>
+                  <td className="col-id">
                     <button
                       type="button"
-                      className="btn small"
+                      className="btn ghost small"
                       aria-label={`remove ${c.id}`}
                       onClick={() => upd({ ...base, criteria: base.criteria.filter((_, j) => j !== i) })}
                     >
-                      ×
+                      Remove
                     </button>
                   </td>
                 )}
@@ -174,13 +184,13 @@ export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable,
         <>
           <button
             type="button"
-            className="btn small"
+            className="btn ghost small add-row"
             onClick={() => upd({ ...base, criteria: [...base.criteria, { id: `c${base.criteria.length + 1}`, description: '' }] })}
           >
-            + add criterion
+            + Add criterion
           </button>
-          {problems.length > 0 && <div className="warn small">{problems.join('; ')}</div>}
-          <div className="row">
+          {problems.length > 0 && <p className="hint warn">{problems.join('; ')}</p>}
+          <div className="approval-bar">
             <button
               type="button"
               className="btn primary"
@@ -195,6 +205,6 @@ export function PlanPanel({ plan, reportSteps, liveSteps, currentStep, editable,
           </div>
         </>
       )}
-    </section>
+    </Panel>
   );
 }

@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, apiGet } from '../lib/api.ts';
 import { domainOf, type NetworkEntry, type NetworkLog, normalizeNetwork, resultOf, SOURCE_NOTE, statusClass } from '../lib/network.ts';
+import { toneOf } from '../lib/status.ts';
 import { useTableState } from '../lib/useTableState.ts';
 import { type Column, DataTable } from './DataTable.tsx';
+import { Banner, Panel } from './Panel.tsx';
+import { Tag } from './StatusBadge.tsx';
 
 const STATUS_LABEL: Record<string, string> = { failed: 'failed / blocked', pending: 'no response' };
 
 function Headers({ title, list }: { title: string; list: [string, string][] }) {
   return (
     <div>
-      <h4>{title}</h4>
+      <h4 className="sub-head">{title}</h4>
       {list.length === 0 ? (
-        <p className="muted small">Not recorded.</p>
+        <p className="hint">Not recorded.</p>
       ) : (
         <dl className="headers">
           {list.map(([k, v], i) => (
@@ -38,7 +41,16 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 /** Run detail: the HTTP request log (`GET /api/runs/:id/network`) as a sortable, filterable table. */
-export function NetworkPanel({ runId, live }: { runId: string; live: boolean }) {
+export function NetworkPanel({
+  runId,
+  live,
+  onSummary,
+}: {
+  runId: string;
+  live: boolean;
+  /** Reports request/failure counts (tab badge). */
+  onSummary?: (s: { requests: number; failed: number }) => void;
+}) {
   const [log, setLog] = useState<NetworkLog | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
@@ -102,9 +114,13 @@ export function NetworkPanel({ runId, live }: { runId: string; live: boolean }) 
         facet: (e) => statusClass(e),
         facetLabel: (f) => STATUS_LABEL[f] ?? f,
         filter: 'select',
-        render: (e) => <span className={`chip chip-http-${statusClass(e)}`}>{e.status ?? (e.error ? 'ERR' : '—')}</span>,
+        render: (e) => (
+          <Tag value={statusClass(e)} tone={toneOf(statusClass(e))}>
+            {e.status ?? (e.error ? 'ERR' : '—')}
+          </Tag>
+        ),
       },
-      { key: 'type', label: 'Type', value: (e) => e.resource_type, filter: 'select', className: 'small' },
+      { key: 'type', label: 'Type', value: (e) => e.resource_type, filter: 'select', className: 'mono' },
       {
         key: 'ms',
         label: 'Time',
@@ -116,8 +132,8 @@ export function NetworkPanel({ runId, live }: { runId: string; live: boolean }) 
         key: 'result',
         label: 'Result',
         value: (e) => resultOf(e),
-        className: 'small',
-        render: (e) => <span className={e.error ? 'warn' : 'muted'}>{resultOf(e)}</span>,
+        className: 'mono',
+        render: (e) => <span className={e.error ? 'cell-error' : 'cell-sub'}>{resultOf(e)}</span>,
       },
     ],
     [copy, copied],
@@ -130,33 +146,33 @@ export function NetworkPanel({ runId, live }: { runId: string; live: boolean }) 
     return ts.length ? Math.min(...ts) : null;
   }, [log]);
 
+  const failed = useMemo(() => (log?.entries ?? []).filter((e) => e.error || (e.status ?? 0) >= 400).length, [log]);
+  useEffect(() => {
+    if (log) onSummary?.({ requests: log.entries.length, failed });
+  }, [log, failed, onSummary]);
+
   return (
-    <section className="panel" data-testid="network-panel">
-      <div className="row spread">
-        <h3>HTTP requests</h3>
-        <button type="button" className="btn small" onClick={() => void load()}>
+    <Panel
+      title="HTTP requests"
+      testId="network-panel"
+      meta={log ? `${log.entries.length} requests · ${failed} failed · source ${log.source}` : undefined}
+      actions={
+        <button type="button" className="btn ghost small" onClick={() => void load()}>
           Refresh
         </button>
-      </div>
-      {error && (
-        <div className="banner error" role="alert">
-          {error}
-        </div>
-      )}
-      {missing && <p className="muted">The request log is not available for this run.</p>}
+      }
+    >
+      {error && <Banner tone="bad">{error}</Banner>}
+      {missing && <p className="hint">The request log is not available for this run.</p>}
       {!log && !missing && !error && (
-        <p className="muted" role="status">
+        <p className="hint" role="status">
           Loading request log…
         </p>
       )}
       {log && (
         <>
-          {note && (
-            <p className="banner small" data-testid="network-source">
-              {note}
-            </p>
-          )}
-          {log.truncated && <p className="banner small">The log was truncated; showing the first {log.entries.length} requests.</p>}
+          {note && <Banner testId="network-source">{note}</Banner>}
+          {log.truncated && <Banner tone="warn">The log was truncated; showing the first {log.entries.length} requests.</Banner>}
           {(log.source !== 'none' || log.entries.length > 0) && (
             <DataTable
               label="HTTP requests"
@@ -173,14 +189,14 @@ export function NetworkPanel({ runId, live }: { runId: string; live: boolean }) 
               rowClassName={(e) => (e.error || (e.status ?? 0) >= 400 ? 'row-bad' : '')}
               renderDetail={(e) => (
                 <div className="request-detail">
-                  <p className="mono small wrap-any">
+                  <p className="mono wrap-any">
                     {e.method} {e.url}
                   </p>
                   <div className="grid2">
                     <Headers title="Request headers" list={e.headers_out} />
                     <Headers title="Response headers" list={e.headers_in} />
                   </div>
-                  <p className="muted small">
+                  <p className="hint mono">
                     {[
                       e.t_ms !== null && t0 !== null ? `+${((e.t_ms - t0) / 1000).toFixed(2)}s after first request` : '',
                       e.cached ? 'served from cache' : '',
@@ -198,6 +214,6 @@ export function NetworkPanel({ runId, live }: { runId: string; live: boolean }) 
           )}
         </>
       )}
-    </section>
+    </Panel>
   );
 }

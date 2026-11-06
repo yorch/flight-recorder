@@ -74,14 +74,14 @@ export function Lightbox({ shots, index, onIndex, label = 'Screenshot preview' }
               <strong className="lightbox-index" aria-live="polite" data-testid="lightbox-index">
                 {i + 1} / {shots.length}
               </strong>
-              <span className="mono small">{baseName(shot.ref)}</span>
-              {shot.group && <span className="muted small">{shot.group}</span>}
+              <span className="mono">{baseName(shot.ref)}</span>
+              {shot.group && <span className="lightbox-group">{shot.group}</span>}
             </div>
-            <div className="row">
-              <a className="btn small" href={shot.src} target="_blank" rel="noreferrer">
+            <div className="lightbox-actions">
+              <a className="btn ghost small" href={shot.src} target="_blank" rel="noreferrer">
                 Open original
               </a>
-              <button type="button" className="btn" onClick={close}>
+              <button type="button" className="btn small" onClick={close}>
                 Close preview
               </button>
             </div>
@@ -121,7 +121,9 @@ export function Lightbox({ shots, index, onIndex, label = 'Screenshot preview' }
               ))}
             </ul>
           )}
-          <p className="muted small lightbox-hint">Use the Left and Right arrow keys to browse. Press Esc to close.</p>
+          <p className="lightbox-hint">
+            <kbd>←</kbd> <kbd>→</kbd> browse · <kbd>Home</kbd> <kbd>End</kbd> first/last · <kbd>Esc</kbd> close
+          </p>
         </>
       )}
     </dialog>

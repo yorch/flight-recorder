@@ -1,46 +1,85 @@
-/* Design tokens (single source): surfaces, type scale, spacing, status palette. */
-/* Workspace tokens: neutral surfaces, restrained indigo, semantic status accents. */
-:where(:root) {
+/*
+ * Flight Recorder tokens. One graphite surface ladder, one signal accent, and a
+ * six-tone status language used by every mark in the console:
+ *   ok (passed/met) · bad (failed/not met/4xx-5xx) · warn (needs a human)
+ *   live (running/in flight) · model (planning/evaluating) · idle (queued/cancelled/unknown)
+ */
+:root {
   color-scheme: dark;
-  font-size: 14px;
-  --bg: #0d1017;
-  --panel: #141923;
-  --panel2: #1b2230;
-  --border: #2b3444;
-  --text: #e6eaf2;
-  --muted: #9ba8bc;
-  --accent: #a4b4ff;
-  --ok: #72d6a1;
-  --bad: #ff969d;
-  --warn: #eac47c;
-  --info: #c0abff;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --type-xs: 0.78rem;
-  --type-sm: 0.88rem;
-  --type-base: 1rem;
-  --type-title: 1.8rem;
-  --status-submitted: #a8b4c7;
-  --status-queued: #a8b4c7;
-  --status-starting: #a4b4ff;
-  --status-planning: #c0abff;
-  --status-awaiting-approval: #eac47c;
-  --status-running: #8bbfff;
-  --status-evaluating: #c0abff;
-  --status-postprocessing: #a4b4ff;
-  --status-exited: #a8b4c7;
-  --status-passed: #72d6a1;
-  --status-failed: #ff969d;
-  --status-unverified: #eac47c;
-  --status-cancelled: #a8b4c7;
-  --row-hover: #18202d;
-  --row-bad: #2a1a20;
-  --surface-sunken: #080b10;
-  line-height: 1.5;
+
+  --font-sans: "Inter", "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  /* Surfaces: darkest at the edges, lifting toward the content. */
+  --bg-0: #06080a;
+  --bg-1: #0a0d11;
+  --bg-2: #0f1318;
+  --bg-3: #151a21;
+  --bg-4: #1c222b;
+  --line: #1f262f;
+  --line-2: #2c3540;
+  --line-3: #3b4654;
+
+  --fg: #dde3eb;
+  --fg-2: #a3adba;
+  --fg-3: #6f7a88;
+
+  /* Signal: the one interactive accent (links, focus, primary action). */
+  --signal: #6cd4ff;
+  --signal-ink: #031018;
+  /* Recorder orange: brand mark only. */
+  --brand: #ff7a1a;
+  --rec: #ff4d4d;
+
+  /* Status tones. */
+  --ok: #3ed598;
+  --bad: #ff5f5f;
+  --warn: #ffb547;
+  --live: #6cd4ff;
+  --model: #b394ff;
+  --idle: #8892a0;
+
+  /* Spacing (4 px grid) and shape. */
+  --s1: 2px;
+  --s2: 4px;
+  --s3: 8px;
+  --s4: 12px;
+  --s5: 16px;
+  --s6: 24px;
+  --s7: 32px;
+  --r1: 2px;
+  --r2: 4px;
+
+  /* Type scale. */
+  --t-2xs: 10.5px;
+  --t-xs: 11.5px;
+  --t-sm: 12.5px;
+  --t-md: 13.5px;
+  --t-lg: 16px;
+  --t-xl: 21px;
+  --t-2xl: 30px;
+
+  --rail-w: 272px;
+  --focus: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--signal);
+  --shadow: 0 18px 60px rgb(0 0 0 / 55%);
+}
+
+/* Any element with a data-tone exposes --tone for its own styling. */
+[data-tone] {
+  --tone: var(--idle);
+}
+[data-tone="ok"] {
+  --tone: var(--ok);
+}
+[data-tone="bad"] {
+  --tone: var(--bad);
+}
+[data-tone="warn"] {
+  --tone: var(--warn);
+}
+[data-tone="live"] {
+  --tone: var(--live);
+}
+[data-tone="model"] {
+  --tone: var(--model);
 }

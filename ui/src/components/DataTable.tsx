@@ -62,7 +62,7 @@ export function DataTable<T>(p: Props<T>) {
               onChange={(e) => onState({ ...state, q: e.target.value })}
             />
           )}
-          <span className="muted small table-count" aria-live="polite">
+          <span className="table-count" aria-live="polite">
             {filtered ? `${visible.length} of ${rows.length}` : rows.length} {p.noun ?? 'rows'}
           </span>
           {filtered && (
@@ -163,9 +163,7 @@ export function DataTable<T>(p: Props<T>) {
             })}
             {visible.length === 0 && (
               <tr className="empty-row">
-                <td colSpan={span} className="muted">
-                  {rows.length === 0 ? (p.empty ?? 'Nothing to show yet.') : 'No rows match the current filters.'}
-                </td>
+                <td colSpan={span}>{rows.length === 0 ? (p.empty ?? 'Nothing to show yet.') : 'No rows match the current filters.'}</td>
               </tr>
             )}
           </tbody>
