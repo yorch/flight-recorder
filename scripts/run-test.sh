@@ -57,6 +57,15 @@ elif [ "$rc" -eq 0 ]; then
   rc=1
 fi
 
+# A failed run is only diagnosable if the containers' stderr survives: `cleanup`
+# below removes them (and their logs) with the project.
+if [ "$rc" -ne 0 ]; then
+  echo "---- container logs (exit $rc) ----"
+  # shellcheck disable=SC2086
+  docker compose $FILES -p "$PROJECT" logs --no-color --tail 120 2>&1 || true
+  echo "---- end container logs ----"
+fi
+
 cleanup
 echo "artifacts: artifacts/$RUN_ID"
 exit "$rc"
