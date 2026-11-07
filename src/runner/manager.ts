@@ -34,12 +34,13 @@ const defaultExec =
     });
 
 /**
- * §16.1: the run's artifact directory must be writable by the container's `node`
- * user (uid 1000), while the host directory belongs to whoever launched the run.
- * Pre-creating it 0777 keeps Linux hosts working; Docker Desktop is permissive.
+ * §16.1: the artifacts root must be writable by the container's `node` user
+ * (uid 1000) so it can create its own run directory (§9 requires a fresh one),
+ * while the host directory belongs to whoever launched the run. Docker Desktop's
+ * permissive mounts hide this; Linux hosts need the mode change.
  */
-export function prepareArtifactDir(root: string, runId: string): string {
-  const dir = path.join(root, 'artifacts', runId);
+export function prepareArtifactRoot(root: string): string {
+  const dir = path.join(root, 'artifacts');
   fs.mkdirSync(dir, { recursive: true });
   fs.chmodSync(dir, 0o777);
   return dir;
@@ -193,7 +194,7 @@ export class RunManager {
       t.state = 'starting';
       fs.mkdirSync(path.join(t.dir, 'control'), { recursive: true });
       fs.writeFileSync(t.overlayFile, composeOverlay(t.dir));
-      prepareArtifactDir(this.opts.root, t.req.runId);
+      prepareArtifactRoot(this.opts.root);
       const up = await this.exec(this.composeArgs(t, ['up', '--build', '-d']), this.envFor(t));
       if (up.code === 0) {
         t.state = 'running';
