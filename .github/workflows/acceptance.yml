@@ -128,16 +128,13 @@ jobs:
           retention-days: 14
       - name: Container logs on failure
         if: failure()
-        env:
-          RUN_ID: ci-logs
-          TEST_FILE: /tests/specs/login.json
-          AGENT_MODEL: stub//tests/stub/login.json
-          AGENT_EGRESS_HOSTS: llm.test:80
         run: |
-          docker ps -a
-          docker compose -f docker-compose.yml \
-            -f tests/acceptance/compose.fixtures.yml \
-            -p acc-diag logs --no-color --tail 200 || true
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}' || true
+          for id in $(docker ps -aq); do
+            name=$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null || echo "$id")
+            echo "== $name"
+            docker logs --tail 120 "$id" 2>&1 || true
+          done
 
   live-smoke:
     name: Live smoke

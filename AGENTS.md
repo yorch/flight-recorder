@@ -133,6 +133,7 @@ artifacts/               gitignored run outputs
 
 - `docker compose up --exit-code-from` implies `--abort-on-container-exit`, which hung runs when the proxy exited early. `run-test.sh` uses `up -d` + `docker wait`, with a trap to always run `down -v`.
 - `docker compose ps --format json` lists exposed ports too; check `PublishedPort > 0`.
+- The orchestrator runs as `node` (uid 1000). On Linux hosts the `./artifacts/<run_id>` bind mount is owned by a different uid, so the run directory is pre-created `0777` by `scripts/run-test.sh` and `prepareArtifactDir()` in the runner. Without it every run dies with exit 2 and writes no artifacts — Docker Desktop hides the bug entirely.
 
 **Model providers**
 

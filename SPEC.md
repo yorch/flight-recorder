@@ -1651,6 +1651,7 @@ GitHub Actions mirrors the gate table; the workflows are the enforcement, the co
 
 Notes:
 
+- Runs write into `./artifacts/<run_id>`, which `scripts/run-test.sh` and the runner pre-create `0777`: the orchestrator runs as `node` (uid 1000) while a Linux CI host uses a different uid, so an ordinary host-owned directory is not writable inside the container (Docker Desktop's mounts are permissive and hide this).
 - The documentation site is **generated, never forked**: `scripts/site/docs.ts` reads `README.md`, `SPEC.md` and `docs/ARCHITECTURE.md`, gives every numbered SPEC heading a stable id (`#s6`, `#s6-6`) and rewrites prose `§N.M` references into links, leaving fenced code and inline code byte-identical. A reference to a section that does not exist fails the build. `AGENTS.md` is deliberately not published.
 - Actions are pinned to commit SHAs; `dependabot` (`.github/dependabot.yml`) bumps them weekly. Every checkout sets `persist-credentials: false`.
 - Runners are pinned to `ubuntu-24.04`, not `ubuntu-latest`: the latter migrates to Ubuntu 26 on 2026-10-19, and Chrome, Docker and ffmpeg behaviour are what the acceptance suite measures. Move the pin deliberately, after a full acceptance run on the new image.

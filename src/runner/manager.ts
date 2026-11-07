@@ -33,6 +33,18 @@ const defaultExec =
       });
     });
 
+/**
+ * §16.1: the run's artifact directory must be writable by the container's `node`
+ * user (uid 1000), while the host directory belongs to whoever launched the run.
+ * Pre-creating it 0777 keeps Linux hosts working; Docker Desktop is permissive.
+ */
+export function prepareArtifactDir(root: string, runId: string): string {
+  const dir = path.join(root, 'artifacts', runId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.chmodSync(dir, 0o777);
+  return dir;
+}
+
 /** §16.1 run overlay: request dir ro at /run-input, control dir ro at /control. */
 export function composeOverlay(dir: string): string {
   return [
@@ -181,6 +193,7 @@ export class RunManager {
       t.state = 'starting';
       fs.mkdirSync(path.join(t.dir, 'control'), { recursive: true });
       fs.writeFileSync(t.overlayFile, composeOverlay(t.dir));
+      prepareArtifactDir(this.opts.root, t.req.runId);
       const up = await this.exec(this.composeArgs(t, ['up', '--build', '-d']), this.envFor(t));
       if (up.code === 0) {
         t.state = 'running';

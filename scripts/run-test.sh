@@ -29,6 +29,12 @@ if [ -n "${COMPOSE_OVERLAYS:-}" ]; then
 fi
 PROJECT="run-$RUN_ID"
 
+# The orchestrator runs as `node` (uid 1000) inside the container. On a Linux
+# host the bind mount is owned by a different uid, so the run directory has to
+# be writable from inside (Docker Desktop's mounts are permissive and hide this).
+mkdir -p "artifacts/$RUN_ID"
+chmod 0777 "artifacts/$RUN_ID"
+
 DOWN_DONE=0
 cleanup() {
   [ "$DOWN_DONE" -eq 1 ] && return 0
