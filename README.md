@@ -46,8 +46,38 @@ COMPOSE_OVERLAYS=tests/acceptance/compose.fixtures.yml \
 | `just up` / `just down` / `just logs` | console + control-plane on <http://127.0.0.1:7070> |
 | `just runner` / `just dev` | runner daemon alone / runner + console in one terminal |
 | `just run [spec] [model]` | one run against the fixture site (defaults: login spec, recorded stub) |
+| `FIXTURES=1 just dev` | runner + console wired to the bundled fixture internet (`app.test`, …) |
 | `just acceptance` | acceptance suite (`ONLY=5,7` or `SKIP=29,32` to narrow) |
 | `just last` | newest run's report and artifact path |
+
+## Running the platform end to end
+
+```bash
+# 1. dependencies + fixture credentials
+bun install
+sh scripts/setup-test-secrets.sh          # TEST_USER_EMAIL / TEST_USER_PASSWORD for the fixture login
+
+# 2. model key(s) — written as files, never echoed (the console lists a model only if its key exists)
+install -m 600 /dev/stdin secrets/ANTHROPIC_API_KEY <<< "$ANTHROPIC_API_KEY"
+
+# 3. check the toolchain, Docker and which secrets are wired
+just doctor
+
+# 4. runner + console in one terminal, pointed at the fixture sites
+FIXTURES=1 just dev                       # or: FIXTURES=1 just runner  +  just up
+```
+
+Open <http://127.0.0.1:7070> and create a run: goal, start URL (`http://app.test/` for the fixture app),
+model, optional plan review, assets. If plan review is on, the run sits in `awaiting_approval` until you
+approve or edit the plan in the console; without it the agent starts immediately.
+
+The first run builds the browser, proxy and orchestrator images (a few minutes); later runs reuse them.
+While a run is live the console streams progress (phase, steps, tokens, screenshots); when it finishes you get
+the verdict plus the condensed video with chapters, the event timeline, the network panel and the report.
+
+Two things that bite on Linux: the console container reaches the runner through
+`host.docker.internal`, so bind the daemon to the bridge gateway (`RUNNER_BIND=172.17.0.1:7071`), and without
+`FIXTURES=1` the `*.test` hosts do not resolve.
 
 Results land in `artifacts/<run_id>/`:
 

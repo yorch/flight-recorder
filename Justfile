@@ -10,6 +10,12 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 only := env("ONLY", "")
 skip := env("SKIP", "")
 
+# FIXTURES=1 points the runner's runs at the bundled fixture internet
+# (app.test, other.test, ...) instead of the public one — required for the
+# specs under tests/specs.
+fixtures := env("FIXTURES", "")
+overlays := if fixtures == "" { "" } else { "tests/acceptance/compose.fixtures.yml" }
+
 # List the recipes
 default:
     @just --list
@@ -108,10 +114,10 @@ ui-test:
 # app (runner daemon + control plane)
 # --------------------------------------------------------------------------
 
-# Run the host runner daemon on 127.0.0.1:7071 (foreground, needs Docker)
+# Run the host runner daemon on 127.0.0.1:7071 (foreground, needs Docker; FIXTURES=1 for the fixture sites)
 [group('app')]
 runner:
-    bun run runner
+    COMPOSE_OVERLAYS={{overlays}} bun run runner
 
 # Build and start the console + control-plane API on http://127.0.0.1:7070
 [group('app')]
@@ -129,12 +135,12 @@ down:
 logs:
     docker compose -f docker-compose.ui.yml logs -f --tail 100 ui
 
-# Runner + console together; Ctrl-C stops both
+# Runner + console together; Ctrl-C stops both (FIXTURES=1 for the fixture sites)
 [group('app')]
 dev:
     #!/usr/bin/env bash
     set -euo pipefail
-    bun run runner &
+    COMPOSE_OVERLAYS={{overlays}} bun run runner &
     runner=$!
     trap 'kill "$runner" 2>/dev/null || true' EXIT INT TERM
     docker compose -f docker-compose.ui.yml up --build
