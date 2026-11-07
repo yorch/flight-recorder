@@ -43,7 +43,18 @@ Results land in `artifacts/<run_id>/`:
 | `agent/transcript.jsonl` | model transcript |
 | `logs/proxy-access.log` | egress log |
 
-Exit codes: `0` passed, `1` failed, `2` harness error, `3` unverified. Planned for §15: `4` cancelled.
+Exit codes: `0` passed, `1` failed, `2` harness error, `3` unverified, `4` cancelled.
+
+## Continuous Integration
+
+Two workflows mirror the gates in SPEC §14.1:
+
+| Workflow | Trigger | Runs |
+|---|---|---|
+| `ci.yml` | push to `main`, every PR | lint, typecheck (root + ui), unit tests with coverage, shellcheck, hadolint |
+| `acceptance.yml` | nightly, manual, or a PR labelled `run-acceptance` (re-runs on later pushes) | the Docker acceptance suite; the manual `live_model` input also runs a real-model smoke |
+
+The `CI` aggregate check is the required status for branch protection. Actions are pinned to commit SHAs and updated by dependabot.
 
 ## Acceptance Suite
 
@@ -60,4 +71,4 @@ SPEC §15–16 describe the next features:
 - a host runner daemon;
 - a control-plane API with a React web UI for creating, approving and reviewing runs.
 
-These are designed but not implemented yet; see `AGENTS.md` for the phase plan.
+These are designed and implemented; see `AGENTS.md` for the current status and `SPEC.md` for the contract.

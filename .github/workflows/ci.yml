@@ -1,0 +1,106 @@
+name: CI
+
+# Fast gates from SPEC §14: lint, typecheck, unit tests + coverage, shell and
+# Dockerfile lint. The Docker-based acceptance suite lives in acceptance.yml.
+# Actions are pinned to commit SHAs (dependabot keeps them current).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '26'
+
+jobs:
+  static:
+    name: Lint & typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            ui/package-lock.json
+      - name: Install (root + ui)
+        run: |
+          npm ci
+          npm --prefix ui ci
+      - name: Biome (format + lint, warnings are errors)
+        run: npm run lint
+      - name: Typecheck (root)
+        run: npm run typecheck
+      - name: Typecheck (ui)
+        run: npm run ui:typecheck
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            ui/package-lock.json
+      - name: Install (root + ui)
+        run: |
+          npm ci
+          npm --prefix ui ci
+      - name: node:test with coverage thresholds (SPEC §14)
+        run: npm run test:coverage
+      - name: vitest (ui)
+        run: npm run ui:test
+
+  docker-lint:
+    name: Shell & Dockerfile lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      # No npm ci: these scripts only shell out to the pinned linter images.
+      - name: shellcheck (pinned image)
+        run: npm run lint:shell
+      - name: hadolint (pinned image)
+        run: npm run lint:docker
+
+  # Single required check for branch protection: red if any gate above failed.
+  ci:
+    name: CI
+    needs: [static, unit, docker-lint]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate gate results
+        run: |
+          failed=''
+          for result in ${{ join(needs.*.result, ' ') }}; do
+            [ "$result" = success ] || failed="$failed $result"
+          done
+          if [ -n "$failed" ]; then
+            echo "Not all gates succeeded:$failed"
+            exit 1
+          fi
+          echo "All gates succeeded"

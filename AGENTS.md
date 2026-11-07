@@ -31,6 +31,7 @@ The runner reads `./secrets/RUNNER_TOKEN` (auto-generated on first start) and dr
 ```text
 SPEC.md                  source of truth (§13 spike evidence, §14 quality gates, §15–16 next features)
 AGENTS.md / README.md    session context / human quick start
+.github/workflows/       CI: ci.yml (fast gates) + acceptance.yml (Docker suite, live smoke)
 docker/browser/          Ubuntu 26.04 + Xvfb + Openbox + Chrome kiosk (sandbox ON via seccomp_profile.json)
 docker/proxy/            Squid 7 egress proxy; gen-squid-conf builds squid.conf from the TestSpec
 Dockerfile               orchestrator image (node:26-trixie-slim + ffmpeg + xdotool)
@@ -74,10 +75,11 @@ artifacts/               gitignored run outputs
 | Task | Command |
 |---|---|
 | All fast gates | `npm run check` (Biome with warnings as errors, `tsc` 7, unit tests with coverage ≥90/80/90, shellcheck, hadolint) |
-| Acceptance suite (~21 min, needs Docker) | `npm run test:acceptance` (filter with `-- --only 5,7`). Writes `artifacts/acceptance-<ts>/report.{json,md}`. |
+| Acceptance suite (~21 min, needs Docker) | `npm run test:acceptance` (filter with `-- --only 5,7` or `-- --skip 29,32`; unknown ids exit 1). Writes `artifacts/acceptance-<ts>/report.{json,md}`. |
 | Fixture test credentials | `sh scripts/setup-test-secrets.sh` (writes `secrets/TEST_USER_EMAIL` and `secrets/TEST_USER_PASSWORD`) |
 | One stub run against fixtures | `COMPOSE_OVERLAYS=tests/acceptance/compose.fixtures.yml scripts/run-test.sh specs/login.json stub//tests/stub/login.json` |
 | Live smoke | `COMPOSE_OVERLAYS=tests/acceptance/compose.fixtures.yml scripts/run-test.sh specs/login.json anthropic/claude-opus-5-5` |
+| CI workflows (GitHub Actions) | `.github/workflows/ci.yml` (fast gates on every PR and on pushes to `main`) and `.github/workflows/acceptance.yml` (nightly, `workflow_dispatch`, or PR label `run-acceptance`). Same commands as above; see SPEC §14.1. |
 | Re-run post-processing | `node src/postprocess/cli.ts artifacts/<run_id>` (inside the orchestrator image) |
 
 ## Environment Facts (This Machine)

@@ -10,7 +10,36 @@ const OUT = process.env.ACC_OUT ?? `artifacts/acceptance-${new Date().toISOStrin
 const SITES_LOG = path.join(OUT, 'sites-log');
 fs.mkdirSync(SITES_LOG, { recursive: true });
 
-const only = process.argv.includes('--only') ? new Set(process.argv[process.argv.indexOf('--only') + 1].split(',').map(Number)) : null;
+// --only / --skip take a comma-separated list of criterion ids. Unknown ids,
+// malformed lists, repeated flags and stray arguments all fail before any run.
+const parseArgs = (argv: string[]): { only: Set<number> | null; skip: Set<number> } => {
+  const parsed: { only: Set<number> | null; skip: Set<number> } = { only: null, skip: new Set() };
+  const seen = new Set<string>();
+  for (let i = 2; i < argv.length; i++) {
+    const flag = argv[i];
+    if (flag !== '--only' && flag !== '--skip') throw new Error(`unknown argument '${flag}' (expected --only <ids> or --skip <ids>)`);
+    if (seen.has(flag)) throw new Error(`duplicate ${flag}`);
+    seen.add(flag);
+    const raw = (argv[i + 1] ?? '').trim();
+    const ids = raw.split(',').map((s) => s.trim());
+    if (!raw || ids.some((s) => !/^\d+$/.test(s))) throw new Error(`${flag} needs criterion ids, got '${raw}'`);
+    const set = new Set(ids.map(Number));
+    if (flag === '--only') parsed.only = set;
+    else parsed.skip = set;
+    i++;
+  }
+  return parsed;
+};
+let only: Set<number> | null = null;
+let skip = new Set<number>();
+try {
+  const parsed = parseArgs(process.argv);
+  only = parsed.only;
+  skip = parsed.skip;
+} catch (err) {
+  console.error((err as Error).message);
+  process.exit(1);
+}
 
 const sh = (cmd: string, env: NodeJS.ProcessEnv = {}): { code: number; out: string } => {
   const r = spawnSync('sh', ['-c', cmd], {
@@ -137,7 +166,7 @@ interface Criterion {
   title: string;
   run: () => Promise<{ pass: boolean; evidence: unknown }>;
 }
-const results: { id: number; title: string; pass: boolean; evidence: unknown; duration_s: number }[] = [];
+const results: { id: number; title: string; pass: boolean; skipped?: boolean; evidence: unknown; duration_s: number }[] = [];
 
 const CRITERIA: Criterion[] = [
   {
@@ -1398,8 +1427,29 @@ const CRITERIA: Criterion[] = [
   },
 ];
 
+const knownIds = new Set(CRITERIA.map((c) => c.id));
+const unknownIds = [...(only ?? []), ...skip].filter((id) => !knownIds.has(id));
+if (unknownIds.length > 0) {
+  console.error(`unknown criterion ids: ${unknownIds.join(',')} (known: ${[...knownIds].sort((a, b) => a - b).join(',')})`);
+  process.exit(1);
+}
+const selected = CRITERIA.filter((c) => !only || only.has(c.id));
+if (selected.length === 0) {
+  console.error('--only selected no criteria');
+  process.exit(1);
+}
+if (selected.every((c) => skip.has(c.id))) {
+  console.error('--skip removed every selected criterion');
+  process.exit(1);
+}
+
 for (const c of CRITERIA) {
   if (only && !only.has(c.id)) continue;
+  if (skip.has(c.id)) {
+    results.push({ id: c.id, title: c.title, pass: false, skipped: true, evidence: { reason: 'skipped by --skip' }, duration_s: 0 });
+    console.log(`[SKIP] ${c.id}. ${c.title}`);
+    continue;
+  }
   const t0 = Date.now();
   let pass = false;
   let evidence: unknown = {};
@@ -1419,8 +1469,10 @@ fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(results, null, 2)
 const md = [
   '| # | Criterion | Result | s |',
   '|---|---|---|---|',
-  ...results.map((r) => `| ${r.id} | ${r.title} | ${r.pass ? 'PASS' : 'FAIL'} | ${r.duration_s} |`),
+  ...results.map((r) => `| ${r.id} | ${r.title} | ${r.skipped ? 'SKIP' : r.pass ? 'PASS' : 'FAIL'} | ${r.duration_s} |`),
 ].join('\n');
 fs.writeFileSync(path.join(OUT, 'report.md'), `${md}\n`);
-console.log(`\n${results.filter((r) => r.pass).length}/${results.length} passed → ${OUT}/report.md`);
-process.exit(results.every((r) => r.pass) ? 0 : 1);
+const ran = results.filter((r) => !r.skipped);
+const skipped = results.length - ran.length;
+console.log(`\n${ran.filter((r) => r.pass).length}/${ran.length} passed${skipped ? `, ${skipped} skipped` : ''} → ${OUT}/report.md`);
+process.exit(ran.length > 0 && ran.every((r) => r.pass) ? 0 : 1);

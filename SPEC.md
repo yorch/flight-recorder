@@ -14,7 +14,7 @@
 - Audio capture.
 - Browsers other than Chrome; mobile/device emulation.
 - The web player UI itself (only its data contract, §8, is specified).
-- CI integration and run scheduling beyond the single-run command in §10.
+- Run scheduling, parallel runs and self-hosted runners (§14.1 covers CI only).
 
 ### Conventions
 
@@ -1172,7 +1172,7 @@ The agent's own claim is never enough to pass a run, because page content can st
 6. Compute the run verdict (§6.4) from the agent outcome and `spec.expect`.
 7. In `finally`: emit `RUN_END` with the verdict, `ScreenRecorder.stop()`, emit `RECORDING_STOP`, and close the log. Copy `/proxy-logs/access.log` to `logs/proxy-access.log` (if it's missing, `egress` is `null` and a warning goes to `logs/harness.log`; any other read error is a harness error), and write `run.json`, including an `egress` summary: `{ allowed: <count>, denied: [{ "host": "host:port", "count": n }] }`, grouped from the proxy's `TCP_DENIED*` lines. Denied requests are reported, not failed: Chrome's own background requests (for example, `www.google.com:443`) appear there routinely. A denied main-frame navigation already fails the run through `session.violation`.
 8. Run post-processing (§7).
-9. Exit code: `0` passed, `1` test failed, `2` harness or post-processing error, `3` unverified.
+9. Exit code: `0` passed, `1` test failed, `2` harness or post-processing error, `3` unverified, `4` cancelled (§15.5).
 
 ### 6.7 Model Providers (`src/agent/providers/`)
 
@@ -1629,8 +1629,27 @@ All gates must pass before a change lands. `npm run check` runs the first five; 
 | Unit tests + coverage | `npm run test:coverage` | `node:test` over `tests/unit/**`. On the pure modules: lines ≥ 90%, branches ≥ 80%, functions ≥ 90%. IO modules are excluded here because the acceptance suite covers them. |
 | Shell lint | `npm run lint:shell` | shellcheck (pinned image) over every script under `docker/` and `scripts/` |
 | Dockerfile lint | `npm run lint:docker` | hadolint (pinned image) over every Dockerfile. Ignores are inline `# hadolint ignore=` comments, limited to DL3008 (unpinned apt packages, deliberate: latest Chrome/Squid) and DL4006 (no `pipefail` in `sh`). |
-| Acceptance | `npm run test:acceptance` | `tests/acceptance/run.ts` automates every criterion in §11 against the fixture site (`tests/fixtures/sites`, ground-truth request log) with stub models. It writes `artifacts/acceptance-<ts>/report.{json,md}`. |
+| Acceptance | `npm run test:acceptance` | `tests/acceptance/run.ts` automates every criterion in §11 against the fixture site (`tests/fixtures/sites`, ground-truth request log) with stub models. It writes `artifacts/acceptance-<ts>/report.{json,md}`. `--only 5,7` and `--skip 29,32` select criteria; unknown or malformed ids and an empty selection exit 1 before anything runs, and skipped criteria appear as `SKIP` in the report. |
 | Live smoke | `scripts/run-test.sh specs/login.json <provider>/<model>` per provider | A real-model run of the login spec against the fixture site ends `PASSED`. This requires keys in `./secrets/`. |
+
+### 14.1 CI
+
+GitHub Actions mirrors the gate table; the workflows are the enforcement, the commands above stay the local equivalent.
+
+| Workflow | Trigger | Runs |
+|---|---|---|
+| `.github/workflows/ci.yml` | every push to `main` and every PR | three parallel jobs — `npm run lint` + both typechecks, `npm run test:coverage` + `npm run ui:test`, and `npm run lint:shell` + `npm run lint:docker` — then a `CI` aggregate job that is the single required status check. Node 26, npm caches for root and `ui/`. |
+| `.github/workflows/acceptance.yml` | nightly 03:17 UTC, `workflow_dispatch` (optional `only` and `live_model` inputs), or a PR labelled `run-acceptance` (re-runs on later pushes to that PR) | `npm run test:acceptance` with `ACC_OUT=artifacts/acceptance-ci`, uploading `report.{json,md}` and writing the table to the job summary. The optional `live-smoke` job writes `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from repository secrets into `./secrets/`, requires `run.json` to say `PASSED`, and uploads `report.{json,md}` plus `chapters.json`. |
+
+Notes:
+
+- Actions are pinned to commit SHAs; `dependabot` (`.github/dependabot.yml`) bumps them weekly. Every checkout sets `persist-credentials: false`.
+- The acceptance suite is not in the PR path: it builds four images and takes tens of minutes, and criterion 5 measures real frame `pts`, which is sensitive to host load. Run it on the PR via the label when the change touches recording, post-processing or the run pair.
+- `dependabot` keeps the workflow files inside the repo conventions: actions pinned to commit SHAs (`.github/dependabot.yml`, weekly, with a 7-day cooldown to match the minimum release age).
+- Why the acceptance job skips 29 and 32 on CI: both drive a host runner daemon bound to `127.0.0.1` from a container via `host.docker.internal` (Docker Desktop). On native Linux the bridge gateway cannot reach host loopback, so those two remain local-run criteria. Everything else (including criterion 1's cross-architecture build under QEMU) runs on the runner; ffmpeg is installed on the host for the criteria that call `ffprobe`.
+- Secrets are never echoed; the live-smoke job fails with an actionable error when the key for the requested provider is missing, rather than skipping to a green run.
+- `workflow_dispatch` with `only` is a debugging aid: several criteria reuse images built by earlier ones, so a filtered selection can fail on a clean machine for a missing `acc-diag-*` image. Trust a filtered pass only after a full run.
+- Local runs stay authoritative for artifacts (`artifacts/` and `data/` are gitignored and never uploaded except the reports above).
 
 ## 15. Natural-Language Runs: Plan, Execute, Evaluate, Report
 

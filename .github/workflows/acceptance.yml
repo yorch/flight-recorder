@@ -1,0 +1,224 @@
+name: Acceptance
+
+# SPEC §14's acceptance suite (tests/acceptance/run.ts, criteria 1-32 with stub
+# models) plus the on-demand live-model smoke. Both need Docker and take tens
+# of minutes, so they do not run on every push: nightly, on demand, or on a PR
+# labelled `run-acceptance`.
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # nightly, 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Criteria ids, comma separated (empty = default set)'
+        required: false
+        default: ''
+        type: string
+      live_model:
+        description: 'Live smoke model, e.g. anthropic/claude-opus-5-5'
+        required: false
+        default: ''
+        type: string
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  # Only events that actually run acceptance share the `run` group (per ref),
+  # so an unrelated label can neither cancel a running suite nor displace a
+  # queued one; it lands in the `other` group where its jobs are skipped.
+  group: >-
+    acceptance-${{ github.ref }}-${{
+    github.event_name == 'pull_request' &&
+    (github.event.action == 'labeled' &&
+     github.event.label.name != 'run-acceptance' ||
+     github.event.action == 'synchronize' &&
+     !contains(github.event.pull_request.labels.*.name, 'run-acceptance'))
+    && 'other' || 'run' }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '26'
+
+jobs:
+  acceptance:
+    name: Acceptance suite
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' &&
+       github.event.label.name == 'run-acceptance') ||
+      (github.event.action == 'synchronize' &&
+       contains(github.event.pull_request.labels.*.name, 'run-acceptance'))
+    runs-on: ubuntu-latest
+    # Criteria 1 builds the browser image for linux/arm64 too, under QEMU.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      # Criterion 1 needs cross-architecture emulation plus a container-driver
+      # builder: the default `docker` driver cannot emit multiple platforms.
+      # v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+      - name: Buildx builder (docker-container driver)
+        run: |
+          docker buildx create --driver docker-container --use --name ci
+          docker buildx ls
+      # The suite builds the browser, proxy, orchestrator and Playwright
+      # images; the runner's preinstalled toolchains exhaust the disk.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
+            /opt/ghc /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes || true
+          df -h /
+      # Criteria 5, 7 and 9 run ffprobe on the host against recorded video.
+      - name: Install host tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install
+        run: npm ci
+      - name: Fixture credentials
+        run: sh scripts/setup-test-secrets.sh
+      - name: Acceptance suite
+        env:
+          ACC_OUT: artifacts/acceptance-ci
+          ONLY: ${{ inputs.only }}
+        run: |
+          mkdir -p artifacts
+          if [ -n "$ONLY" ]; then
+            node tests/acceptance/run.ts --only "$ONLY"
+          else
+            # 29 and 32 need a container to reach a host daemon bound to
+            # 127.0.0.1 (Docker Desktop's host.docker.internal). On native
+            # Linux the bridge gateway cannot reach host loopback, so those
+            # two stay a local-run criterion; everything else runs here.
+            node tests/acceptance/run.ts --skip 29,32
+          fi
+      - name: Job summary
+        if: always()
+        run: |
+          cat artifacts/acceptance-ci/report.md \
+            >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Upload report
+        if: always()
+        # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acceptance-report
+          path: |
+            artifacts/acceptance-ci/report.json
+            artifacts/acceptance-ci/report.md
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Container logs on failure
+        if: failure()
+        env:
+          RUN_ID: ci-logs
+          TEST_FILE: /tests/specs/login.json
+          AGENT_MODEL: stub//tests/stub/login.json
+          AGENT_EGRESS_HOSTS: llm.test:80
+        run: |
+          docker ps -a
+          docker compose -f docker-compose.yml \
+            -f tests/acceptance/compose.fixtures.yml \
+            -p acc-diag logs --no-color --tail 200 || true
+
+  live-smoke:
+    name: Live smoke
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.live_model != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
+            /opt/ghc /opt/hostedtoolcache/CodeQL
+          docker system prune -af --volumes || true
+          df -h /
+      # Keys arrive as repository secrets, are written to the gitignored
+      # ./secrets/ as files (SPEC §6.5) and are never echoed. The key for the
+      # requested provider must exist: a silent skip would be a green run that
+      # tested nothing.
+      - name: Materialise keys
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LIVE_MODEL: ${{ inputs.live_model }}
+        run: |
+          set -eu
+          mkdir -p secrets
+          provider=${LIVE_MODEL%%/*}
+          case "$provider" in
+            anthropic) needed="$ANTHROPIC_API_KEY"; name=ANTHROPIC_API_KEY ;;
+            openai) needed="$OPENAI_API_KEY"; name=OPENAI_API_KEY ;;
+            *)
+              echo "::error::unknown provider '$provider' in $LIVE_MODEL"
+              exit 1
+              ;;
+          esac
+          if [ -z "$needed" ]; then
+            echo "::error::repository secret $name is empty or unset"
+            exit 1
+          fi
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            printf '%s' "$ANTHROPIC_API_KEY" > secrets/ANTHROPIC_API_KEY
+          fi
+          if [ -n "$OPENAI_API_KEY" ]; then
+            printf '%s' "$OPENAI_API_KEY" > secrets/OPENAI_API_KEY
+          fi
+      - name: Install
+        run: npm ci
+      - name: Fixture credentials
+        run: sh scripts/setup-test-secrets.sh
+      - name: Live run (login spec, fixture site)
+        env:
+          LIVE_MODEL: ${{ inputs.live_model }}
+        run: |
+          set -euo pipefail
+          COMPOSE_OVERLAYS=tests/acceptance/compose.fixtures.yml \
+            scripts/run-test.sh specs/login.json "$LIVE_MODEL" \
+            | tee /tmp/live.log
+          run_id=$(sed -n \
+            's/.*artifacts: artifacts\/\([^ ]*\).*/\1/p' \
+            /tmp/live.log | tail -1)
+          if [ -z "$run_id" ]; then
+            echo "::error::no run id in run-test.sh output"
+            exit 1
+          fi
+          status=$(node -e 'const f=process.argv[1];console.log(
+            JSON.parse(require("node:fs").readFileSync(f,"utf8")).status)' \
+            "artifacts/$run_id/run.json")
+          echo "run $run_id → $status"
+          [ "$status" = PASSED ]
+      - name: Upload run report
+        if: always()
+        # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: live-smoke-report
+          path: |
+            artifacts/*/report.json
+            artifacts/*/report.md
+            artifacts/*/chapters.json
+          if-no-files-found: ignore
+          retention-days: 14

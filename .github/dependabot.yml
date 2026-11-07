@@ -1,0 +1,19 @@
+version: 2
+
+# CI actions are pinned to commit SHAs (SPEC §14.1); this keeps them current.
+# npm dependencies stay out of dependabot: they are pinned exactly, with a
+# minimum seven-day release age (AGENTS.md), which a bot bump would violate.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7 # matches the project's minimum release age (AGENTS.md)
+    commit-message:
+      prefix: chore
+    groups:
+      actions:
+        patterns: ['*']
