@@ -31,6 +31,7 @@ src/                 11 files at the top level + 5 subdirs
   server/                                                control-plane HTTP API
   network.ts                                             request/response log
 ui/                  React + Vite console (workspace package)
+site/                Astro + Starlight docs site (workspace package; published to Pages)
 tests/
   unit/              17 bun:test files
   acceptance/        run.ts driver, criteria 1-32, overlays, tools/ run inside e2e image
@@ -38,6 +39,7 @@ tests/
   specs/ stub/       TestSpecs and stub-model scripts used by the suite
 docker/              browser/ proxy/ ui/ e2e/   (each its own image; e2e uses the repo root as context)
 scripts/             run-test.sh, setup-test-secrets.sh, coverage.ts + coverage-gate.ts (the coverage gate)
+scripts/site/        docs importer (docs.ts, unit-tested) + two CLIs: build-docs.ts, check-links.ts
 spike/               architecture evidence (§13), including ~12 MB of committed video
 data/ artifacts/ secrets/   runtime state, gitignored
 ```
@@ -123,6 +125,14 @@ stages copy the workspace manifests they need (`package.json`, `bun.lock`,
 `ui/package.json`); the e2e stage writes its own one-line manifest and copies
 `tests/acceptance/tools/`. If the Playwright driver moves to
 `tests/e2e/`, revisit whether the e2e image can get its own context.
+
+## Documentation site
+
+`site/` publishes the existing markdown at <https://yorch.github.io/flight-recorder/>. It is generated, not forked:
+`scripts/site/docs.ts` rewrites `README.md`, `SPEC.md` and `docs/ARCHITECTURE.md` into `site/src/content/docs/`
+(gitignored), assigns stable section anchors (`#s6-6`) and links prose `§` references. The output is
+allowlisted, regenerated wholesale, and checked for broken internal links and fragments after the Astro build.
+`AGENTS.md` stays in the repository: it is machine- and contributor-specific working memory, not user guidance.
 
 ## What this change did, and what is proposed next
 

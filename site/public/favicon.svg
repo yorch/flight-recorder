@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Flight Recorder">
+  <rect width="32" height="32" rx="7" fill="#101418"/>
+  <circle cx="16" cy="16" r="7" fill="none" stroke="#a8e6cc" stroke-width="2.5"/>
+  <circle cx="16" cy="16" r="2.5" fill="#1f7a5c"/>
+</svg>

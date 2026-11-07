@@ -1,0 +1,72 @@
+name: Pages
+
+# Publishes the documentation site (site/) to GitHub Pages on pushes that touch
+# a source document or the site itself. Build runs with read-only permissions;
+# only the deploy job gets pages:write/id-token, and only on the main ref, so a
+# fork PR can never publish (SPEC §14.1).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'README.md'
+      - 'SPEC.md'
+      - 'docs/**'
+      - 'scripts/site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # Keep in step with `packageManager` in package.json.
+  BUN_VERSION: '1.4.1'
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - name: Install
+        run: bun install --frozen-lockfile
+      # Generates the docs from README/SPEC/docs, builds, then checks every
+      # internal link and fragment in the emitted HTML.
+      - name: Build (docs + astro + link check)
+        run: bun run site:build
+      # v5
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      # v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: site/dist
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # v4
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

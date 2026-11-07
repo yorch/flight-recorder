@@ -1,0 +1,42 @@
+/* Project-site tweaks on top of Starlight's defaults. */
+:root {
+  --sl-color-accent-low: #10221c;
+  --sl-color-accent: #1f7a5c;
+  --sl-color-accent-high: #a8e6cc;
+}
+
+/* The architecture diagram and repo tree are wide; scroll them, never wrap. */
+.ascii-diagram,
+.ascii-diagram pre {
+  overflow-x: auto;
+  font-size: var(--sl-text-xs);
+  line-height: 1.35;
+}
+
+/* Showcase media on the landing page. */
+.showcase {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.showcase img {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+}
+
+.showcase figcaption {
+  color: var(--sl-color-gray-2);
+  font-size: var(--sl-text-sm);
+}
+
+/* Muted notice used by the generated "source / status" banners. */
+.generated-notice {
+  border-left: 3px solid var(--sl-color-accent);
+  background: var(--sl-color-gray-6);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0.4rem 0.4rem 0;
+  font-size: var(--sl-text-sm);
+}

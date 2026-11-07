@@ -21,6 +21,9 @@ coveragePathIgnorePatterns = [
   # Types only: bun instruments executable code, so this never appears and the
   # gate would otherwise report it as missing.
   'src/agent/contract.ts',
-  # Gate CLI glue: exercised by CI itself, not by unit tests.
+  # CLI glue, exercised by CI itself, not by unit tests:
+  # coverage gate, and the site's doc generator + link checker.
   'scripts/coverage-gate.ts',
+  'scripts/site/build-docs.ts',
+  'scripts/site/check-links.ts',
 ]

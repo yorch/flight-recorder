@@ -7,3 +7,11 @@ coverage/
 secrets/*
 !secrets/.gitkeep
 .DS_Store
+
+# site: generated documents and build output (sources stay at the repo root)
+site/.astro/
+site/dist/
+site/src/content/docs/readme.md
+site/src/content/docs/spec.md
+site/src/content/docs/architecture.md
+site/src/generated/

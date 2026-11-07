@@ -1,0 +1,84 @@
+---
+title: Flight Recorder
+description: An AI agent drives a real, sandboxed Chrome to run your browser test. The harness records every step and decides pass or fail.
+template: splash
+hero:
+  tagline: An agent takes the test. The harness keeps the receipts — screen video, event timeline, screenshots, transcript — and decides pass or fail on its own evidence.
+  actions:
+    - text: Read the specification
+      link: spec/
+      icon: right-arrow
+      variant: primary
+    - text: Watch the demo
+      link: https://github.com/yorch/flight-recorder/releases/latest
+      icon: external
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/yorch/flight-recorder
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+import diagram from '../../generated/architecture.txt?raw';
+import quickstart from '../../generated/quickstart.txt?raw';
+
+export const posterSrc = `${import.meta.env.BASE_URL.replace(/\/$/, '')}/poster.png`;
+
+<figure class="showcase">
+  <img src={posterSrc} alt="The Flight Recorder console: run list, live progress, recording, report and network panels" width="1600" />
+  <figcaption>The console: every run is a recording you can scrub, with the plan, criteria, screenshots and network log next to it.</figcaption>
+</figure>
+
+## What it is
+
+An AI agent drives a real, headful, sandboxed Chrome inside Docker to execute a browser test — either a
+recorded `TestSpec` or a plain-English goal it first turns into a plan. Everything it sees and does is
+recorded, and the pass/fail verdict is decided by the harness from deterministic evidence, never by the
+agent's own claim.
+
+<CardGrid>
+  <Card title="Evidence, not vibes" icon="document">
+    Screen video with idle time compressed, an event timeline, screenshots, the model transcript and a
+    per-request network log — all time-synchronised in one run directory.
+  </Card>
+  <Card title="Harness verdict" icon="approve-check">
+    Assertions the harness executes plus an evaluator that can only *downgrade* a run. The agent claiming
+    success is never enough.
+  </Card>
+  <Card title="Isolation by construction" icon="lock">
+    The run pair shares a network namespace with no route out; all egress goes through an allowlisting
+    Squid proxy, and the browser keeps its sandbox on.
+  </Card>
+  <Card title="Reviewable plans" icon="list-format">
+    Natural-language runs plan first, optionally wait for approval, then execute step by step with
+    chapters marked `pN · label` in the video.
+  </Card>
+</CardGrid>
+
+## How it fits together
+
+<pre class="ascii-diagram" aria-label="Architecture diagram">{diagram}</pre>
+
+## Run it
+
+<pre class="ascii-diagram"><code>{quickstart}</code></pre>
+
+Then open the console at <code>http://127.0.0.1:7070</code>, or run a single spec headlessly.
+
+## Documentation
+
+<CardGrid>
+  <Card title="Get started" icon="rocket">
+    [Install, secrets, the console and the runner](./readme/)
+  </Card>
+  <Card title="Technical specification" icon="setting">
+    [The normative reference: architecture, protocols, verdicts, acceptance criteria](./spec/)
+  </Card>
+  <Card title="Architecture notes" icon="puzzle">
+    [Repository layout, toolchain split and the structural backlog](./architecture/)
+  </Card>
+</CardGrid>
+
+<p class="generated-notice">This site is generated from the repository's markdown at build time; the sources are
+<a href="https://github.com/yorch/flight-recorder">README.md, SPEC.md and docs/</a>. MIT licensed.</p>

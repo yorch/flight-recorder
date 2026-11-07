@@ -14,6 +14,7 @@ WORKDIR /app
 # though this image never installs or runs the console.
 COPY package.json bun.lock ./
 COPY ui/package.json ./ui/package.json
+COPY site/package.json ./site/package.json
 RUN bun install --frozen-lockfile --production --filter .
 COPY src ./src
 

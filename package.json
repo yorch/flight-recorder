@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "bun@1.4.1",
   "workspaces": [
-    "ui"
+    "ui",
+    "site"
   ],
   "engines": {
     "node": ">=26"
@@ -24,7 +25,10 @@
     "ui:test": "bun run --cwd ui test",
     "runner": "node src/runner/index.ts",
     "server": "node src/server/index.ts",
-    "test:acceptance": "node tests/acceptance/run.ts"
+    "test:acceptance": "node tests/acceptance/run.ts",
+    "site:docs": "bun run --cwd site docs",
+    "site:dev": "bun run --cwd site dev",
+    "site:build": "bun run --cwd site build"
   },
   "dependencies": {
     "playwright-core": "1.64.1",

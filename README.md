@@ -9,6 +9,7 @@ An AI agent drives a real, sandboxed Chrome to execute a browser test, and the h
 
 The harness verifies the outcome itself. It produces a condensed video with idle time compressed, zoom on each action, and chapters marked passed/failed. All network egress goes through an allowlisting proxy.
 
+- **Documentation site:** <https://yorch.github.io/flight-recorder/>
 - **Design and acceptance criteria:** [SPEC.md](SPEC.md)
 - **Working notes, status and conventions for contributors and agents:** [AGENTS.md](AGENTS.md)
 
@@ -49,6 +50,7 @@ COMPOSE_OVERLAYS=tests/acceptance/compose.fixtures.yml \
 | `FIXTURES=1 just dev` | runner + console wired to the bundled fixture internet (`app.test`, …) |
 | `just acceptance` | acceptance suite (`ONLY=5,7` or `SKIP=29,32` to narrow) |
 | `just last` | newest run's report and artifact path |
+| `just site` / `just site-dev` | build / live-edit the documentation site in `site/` |
 
 ## Running the platform end to end
 

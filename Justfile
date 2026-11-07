@@ -111,6 +111,25 @@ ui-test:
     bun run ui:test
 
 # --------------------------------------------------------------------------
+# docs site (GitHub Pages)
+# --------------------------------------------------------------------------
+
+# Regenerate the site documents from README/SPEC/docs and build the static site
+[group('site')]
+site:
+    bun run site:build
+
+# Astro dev server for the site on :4321 (regenerates the docs first)
+[group('site')]
+site-dev:
+    bun run site:dev
+
+# Regenerate the published documents without building the site
+[group('site')]
+site-docs:
+    bun run site:docs
+
+# --------------------------------------------------------------------------
 # app (runner daemon + control plane)
 # --------------------------------------------------------------------------
 

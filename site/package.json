@@ -1,0 +1,19 @@
+{
+  "name": "flight-recorder-site",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "docs": "bun ../scripts/site/build-docs.ts",
+    "dev": "bun run docs && astro dev",
+    "build": "bun run docs && astro build && bun ../scripts/site/check-links.ts dist",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.10",
+    "astro": "7.4.7"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

@@ -7,6 +7,7 @@ COPY --from=oven/bun:1.4.1-slim /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY ui/package.json ./ui/package.json
+COPY site/package.json ./site/package.json
 RUN bun install --frozen-lockfile
 COPY ui ./ui
 RUN bun run --cwd ui build
@@ -17,6 +18,7 @@ COPY --from=oven/bun:1.4.1-slim /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY package.json bun.lock ./
 COPY ui/package.json ./ui/package.json
+COPY site/package.json ./site/package.json
 RUN bun install --frozen-lockfile --production --filter .
 COPY src ./src
 COPY --from=uibuild /app/ui/dist ./ui/dist
