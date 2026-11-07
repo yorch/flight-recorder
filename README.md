@@ -72,3 +72,7 @@ SPEC §15–16 describe the next features:
 - a control-plane API with a React web UI for creating, approving and reviewing runs.
 
 These are designed and implemented; see `AGENTS.md` for the current status and `SPEC.md` for the contract.
+
+## License
+
+[MIT](LICENSE) © 2026 Jorge Barnaby

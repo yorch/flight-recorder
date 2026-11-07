@@ -1,6 +1,7 @@
 {
   "name": "browser-agent-ui",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
