@@ -7,6 +7,17 @@ import type { Session } from './session.ts';
 
 export class AssertionFailure extends Error {}
 
+/**
+ * `page.goto` resolves on any HTTP response, so an error page (including Squid's own
+ * DNS-failure / denied pages, marked with `X-Squid-Error`) would otherwise count as a
+ * successful navigation. Returns the failure message, or null when the response is OK.
+ */
+export function navigationError(url: string, status: number | null, headers: Record<string, string> = {}): string | null {
+  if (status === null || status < 400) return null;
+  const proxy = headers['x-squid-error'];
+  return `Navigation to ${url} returned HTTP ${status}${proxy ? ` (proxy error: ${proxy})` : ''}`;
+}
+
 type StepMeta = { step_id: string; label: string; action: ActionKind; mode: ActionMode; plan_step?: string | null };
 type AriaRole = Parameters<Page['getByRole']>[0];
 
@@ -74,7 +85,9 @@ export class InteractionEngine {
   navigate(stepId: string, label: string, url: string, planStep?: string | null) {
     return this.step({ step_id: stepId, label, action: 'navigate', mode: 'PAGE', plan_step: planStep ?? null }, async () => {
       if (!this.isAllowedUrl(url)) throw new Error(`URL not in allowlist: ${url}`);
-      await this.page.goto(url, { waitUntil: 'load' });
+      const res = await this.page.goto(url, { waitUntil: 'load' });
+      const err = res && navigationError(url, res.status(), res.headers());
+      if (err) throw new Error(err);
     });
   }
 
