@@ -1638,12 +1638,13 @@ GitHub Actions mirrors the gate table; the workflows are the enforcement, the co
 
 | Workflow | Trigger | Runs |
 |---|---|---|
-| `.github/workflows/ci.yml` | every push to `main` and every PR | three parallel jobs — `npm run lint` + both typechecks, `npm run test:coverage` + `npm run ui:test`, and `npm run lint:shell` + `npm run lint:docker` — then a `CI` aggregate job that is the single required status check. Node 26, npm caches for root and `ui/`. |
+| `.github/workflows/ci.yml` | every push to `main` and every PR | three parallel jobs on `ubuntu-24.04` — `npm run lint` + both typechecks, `npm run test:coverage` + `npm run ui:test`, and `npm run lint:shell` + `npm run lint:docker` — then a `CI` aggregate job that is the single required status check. Node 26, npm caches for root and `ui/`. |
 | `.github/workflows/acceptance.yml` | nightly 03:17 UTC, `workflow_dispatch` (optional `only` and `live_model` inputs), or a PR labelled `run-acceptance` (re-runs on later pushes to that PR) | `npm run test:acceptance` with `ACC_OUT=artifacts/acceptance-ci`, uploading `report.{json,md}` and writing the table to the job summary. The optional `live-smoke` job writes `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from repository secrets into `./secrets/`, requires `run.json` to say `PASSED`, and uploads `report.{json,md}` plus `chapters.json`. |
 
 Notes:
 
 - Actions are pinned to commit SHAs; `dependabot` (`.github/dependabot.yml`) bumps them weekly. Every checkout sets `persist-credentials: false`.
+- Runners are pinned to `ubuntu-24.04`, not `ubuntu-latest`: the latter migrates to Ubuntu 26 on 2026-10-19, and Chrome, Docker and ffmpeg behaviour are what the acceptance suite measures. Move the pin deliberately, after a full acceptance run on the new image.
 - The acceptance suite is not in the PR path: it builds four images and takes tens of minutes, and criterion 5 measures real frame `pts`, which is sensitive to host load. Run it on the PR via the label when the change touches recording, post-processing or the run pair.
 - `dependabot` keeps the workflow files inside the repo conventions: actions pinned to commit SHAs (`.github/dependabot.yml`, weekly, with a 7-day cooldown to match the minimum release age).
 - Why the acceptance job skips 29 and 32 on CI: both drive a host runner daemon bound to `127.0.0.1` from a container via `host.docker.internal` (Docker Desktop). On native Linux the bridge gateway cannot reach host loopback, so those two remain local-run criteria. Everything else (including criterion 1's cross-architecture build under QEMU) runs on the runner; ffmpeg is installed on the host for the criteria that call `ffprobe`.
