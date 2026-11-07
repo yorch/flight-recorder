@@ -16,6 +16,7 @@ The harness verifies the outcome itself. It produces a condensed video with idle
 
 - Docker Desktop or Docker Engine with Compose v2+ (linux/amd64 or arm64)
 - Bun ≥ 1.4 as the package manager, test runner and script runner (`bun.lock` is the only lock)
+- `just` for the task recipes (optional — every recipe wraps a command you can run directly)
 - Node.js ≥ 24.12 on the host (the runtime for the orchestrator, runner, server and scripts; containers use Node 26)
 - Model API keys as files: `secrets/ANTHROPIC_API_KEY` and/or `secrets/OPENAI_API_KEY`
 
@@ -31,6 +32,22 @@ sh scripts/setup-test-secrets.sh   # test credentials matching the fixture login
 COMPOSE_OVERLAYS=tests/acceptance/compose.fixtures.yml \
   scripts/run-test.sh specs/login.json anthropic/claude-opus-5-5
 ```
+
+## Tasks
+
+`just` wraps the commands you actually type; `just --list` shows all of them.
+
+| Recipe | Does |
+|---|---|
+| `just install` | `bun install --frozen-lockfile` |
+| `just check` | every fast gate from SPEC §14 (lint, typecheck, unit + coverage, UI, shellcheck, hadolint) |
+| `just test` / `just cover` | unit tests / unit tests with the coverage gate |
+| `just doctor` | toolchain versions, Docker status, which secrets exist (never their values) |
+| `just up` / `just down` / `just logs` | console + control-plane on <http://127.0.0.1:7070> |
+| `just runner` / `just dev` | runner daemon alone / runner + console in one terminal |
+| `just run [spec] [model]` | one run against the fixture site (defaults: login spec, recorded stub) |
+| `just acceptance` | acceptance suite (`ONLY=5,7` or `SKIP=29,32` to narrow) |
+| `just last` | newest run's report and artifact path |
 
 Results land in `artifacts/<run_id>/`:
 

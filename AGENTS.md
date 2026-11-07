@@ -34,6 +34,7 @@ SPEC.md                  source of truth (§13 spike evidence, §14 quality gate
 AGENTS.md / README.md    session context / human quick start
 .github/workflows/       CI: ci.yml (fast gates) + acceptance.yml (Docker suite, live smoke)
 package.json + bun.lock  workspace root (ui is the one workspace member); bun is the toolchain
+Justfile                 task recipes for humans; each one wraps a package.json script or compose call
 bunfig.toml              bun test config: coverage excludes (the aggregate gate is in scripts/)
 scripts/coverage.ts      lcov parsing + expected-source inventory (unit-tested)
 scripts/coverage-gate.ts SPEC §14 CLI: aggregate floors + complete-report check
@@ -80,6 +81,7 @@ artifacts/               gitignored run outputs
 
 | Task | Command |
 |---|---|
+| Task runner | `just --list`; recipes wrap the commands below (`just check`, `just up`, `just run`, `just acceptance`, `just doctor`). Add no behaviour of their own. |
 | All fast gates | `bun run check` (Biome with warnings as errors, `tsc` 7, `bun test` + aggregate coverage gate ≥90/90, shellcheck, hadolint) |
 | Acceptance suite (~21 min, needs Docker) | `bun run test:acceptance` (filter with `-- --only 5,7` or `-- --skip 29,32`; unknown ids exit 1). Writes `artifacts/acceptance-<ts>/report.{json,md}`. |
 | Fixture test credentials | `sh scripts/setup-test-secrets.sh` (writes `secrets/TEST_USER_EMAIL` and `secrets/TEST_USER_PASSWORD`) |

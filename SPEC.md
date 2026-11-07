@@ -1626,7 +1626,7 @@ Caveats seen in the spike:
 
 ## 14. Quality Gates
 
-All gates must pass before a change lands. `bun run check` runs the first five; the acceptance suite runs separately because it needs Docker and takes minutes.
+All gates must pass before a change lands. `bun run check` runs the first five; the acceptance suite runs separately because it needs Docker and takes minutes. The root `Justfile` exposes the same commands (plus the run/compose lifecycle) as recipes for humans and must not add behaviour of its own.
 
 | Gate | Command | Rule |
 |---|---|---|
