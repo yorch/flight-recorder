@@ -1,5 +1,5 @@
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
 import { AgentTurn, agentTurnJsonSchema, agentWireSchema, normalizeEnums, toWireSchema } from '../../src/agent/actions.ts';
 
 const FORBIDDEN = new Set([

@@ -1,9 +1,9 @@
+import { afterAll, describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
 import { createRunnerHandler } from '../../src/runner/http.ts';
 import { composeOverlay, RunManager } from '../../src/runner/manager.ts';
 import { agentEgressHosts, loadRunRequest, providerOf, RequestError, resolveRequestDir } from '../../src/runner/request.ts';
@@ -137,7 +137,7 @@ describe('runner http handler', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   });
-  after(() => new Promise<void>((r) => server.close(() => r())));
+  afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
   it('401 without/with a wrong token', async () => {
     assert.equal((await req('GET', '/health', { token: null })).code, 401);

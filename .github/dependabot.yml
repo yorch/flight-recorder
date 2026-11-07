@@ -1,7 +1,7 @@
 version: 2
 
 # CI actions are pinned to commit SHAs (SPEC §14.1); this keeps them current.
-# npm dependencies stay out of dependabot: they are pinned exactly, with a
+# npm/bun dependencies stay out of dependabot: they are pinned exactly, with a
 # minimum seven-day release age (AGENTS.md), which a bot bump would violate.
 updates:
   - package-ecosystem: github-actions

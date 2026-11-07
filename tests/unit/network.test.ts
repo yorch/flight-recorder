@@ -1,8 +1,8 @@
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it } from 'node:test';
 import type { Page, Request } from 'playwright-core';
 import { NETWORK_ENTRIES_CAP, NetworkLog, networkEntries } from '../../src/network.ts';
 import { _resetSecrets, loadSecrets } from '../../src/secrets.ts';

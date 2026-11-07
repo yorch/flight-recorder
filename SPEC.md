@@ -27,6 +27,7 @@ Code in this document is normative for interfaces, data formats and behaviour; i
 | Browser base image | `ubuntu:26.04` |
 | Chrome | Latest `google-chrome-stable` from Google's apt repo at image build time (156.0.8078.73 at spike time). Deliberately unpinned; each run records the version (§4.2). |
 | Orchestrator base image | `node:26-trixie-slim` (Node 26 LTS "Lithium"; Debian 13 with ffmpeg 7.1) |
+| Package manager | `bun` 1.4.1 — single workspace lock (`bun.lock`), exact pins; bun also runs the unit tests and CI. Node remains the runtime for the orchestrator, runner, server and scripts. |
 | Playwright | `playwright-core@1.64.1` |
 | zod | 4.x (exact pin in the lockfile) |
 | TypeScript (type-check only) | 7.x (`tsc --noEmit`) |
@@ -96,7 +97,7 @@ docker/proxy/
   gen-squid-conf            # TestSpec -> squid.conf, then runs Squid
 Dockerfile                  # orchestrator image
 docker-compose.yml
-package.json, package-lock.json, tsconfig.json
+package.json, bun.lock, bunfig.toml, tsconfig.json
 src/
   main.ts                   # entry point: one test run end-to-end
   config.ts                 # env + TestSpec loading
@@ -259,13 +260,18 @@ Flag rationale:
 # syntax=docker/dockerfile:1
 FROM node:26-trixie-slim
 
+# bun installs the dependencies; node runs the sources.
+COPY --from=oven/bun:1.4.1-slim /usr/local/bin/bun /usr/local/bin/bun
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ffmpeg xdotool x11-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# The lock is a workspace lock: the ui manifest must exist even here.
+COPY package.json bun.lock ./
+COPY ui/package.json ./ui/package.json
+RUN bun install --frozen-lockfile --production --filter .
 COPY src ./src
 
 USER node
@@ -1620,16 +1626,16 @@ Caveats seen in the spike:
 
 ## 14. Quality Gates
 
-All gates must pass before a change lands. `npm run check` runs the first five; the acceptance suite runs separately because it needs Docker and takes minutes.
+All gates must pass before a change lands. `bun run check` runs the first five; the acceptance suite runs separately because it needs Docker and takes minutes.
 
 | Gate | Command | Rule |
 |---|---|---|
-| Format + lint | `npm run lint` | `biome check --error-on-warnings .`: zero findings |
-| Typecheck | `npm run typecheck` | `tsc --noEmit` with TypeScript 7 (`strict`, `erasableSyntaxOnly`) |
-| Unit tests + coverage | `npm run test:coverage` | `node:test` over `tests/unit/**`. On the pure modules: lines ≥ 90%, branches ≥ 80%, functions ≥ 90%. IO modules are excluded here because the acceptance suite covers them. |
-| Shell lint | `npm run lint:shell` | shellcheck (pinned image) over every script under `docker/` and `scripts/` |
-| Dockerfile lint | `npm run lint:docker` | hadolint (pinned image) over every Dockerfile. Ignores are inline `# hadolint ignore=` comments, limited to DL3008 (unpinned apt packages, deliberate: latest Chrome/Squid) and DL4006 (no `pipefail` in `sh`). |
-| Acceptance | `npm run test:acceptance` | `tests/acceptance/run.ts` automates every criterion in §11 against the fixture site (`tests/fixtures/sites`, ground-truth request log) with stub models. It writes `artifacts/acceptance-<ts>/report.{json,md}`. `--only 5,7` and `--skip 29,32` select criteria; unknown or malformed ids and an empty selection exit 1 before anything runs, and skipped criteria appear as `SKIP` in the report. |
+| Format + lint | `bun run lint` | `biome check --error-on-warnings .`: zero findings |
+| Typecheck | `bun run typecheck` | `tsc --noEmit` with TypeScript 7 (`strict`, `erasableSyntaxOnly`) |
+| Unit tests + coverage | `bun run test:coverage` | `bun test` over `tests/unit/**` (`bun:test`, `node:assert`). On the pure modules: lines ≥ 90%, functions ≥ 90%. IO modules are excluded here because the acceptance suite covers them. The floors are aggregate and enforced by `scripts/coverage-gate.ts` from the lcov report, because bun's own `coverageThreshold` is per-file; bun has no branch metric, so branch coverage is no longer gated. The gate also requires the report to contain exactly the expected source set (all of `src/` and `scripts/` minus `bunfig.toml`'s `coveragePathIgnorePatterns`), so deleting a module's tests cannot shrink the denominator. A report that is empty, truncated, unterminated, internally inconsistent (summary counters disagreeing with the per-line detail) or non-integer fails instead of reading as 100%, and threshold decisions use exact integer arithmetic so a ratio just below the floor cannot round up to a pass. |
+| Shell lint | `bun run lint:shell` | shellcheck (pinned image) over every script under `docker/` and `scripts/` |
+| Dockerfile lint | `bun run lint:docker` | hadolint (pinned image) over every Dockerfile. Ignores are inline `# hadolint ignore=` comments, limited to DL3008 (unpinned apt packages, deliberate: latest Chrome/Squid) and DL4006 (no `pipefail` in `sh`). |
+| Acceptance | `bun run test:acceptance` | `tests/acceptance/run.ts` automates every criterion in §11 against the fixture site (`tests/fixtures/sites`, ground-truth request log) with stub models. It writes `artifacts/acceptance-<ts>/report.{json,md}`. `--only 5,7` and `--skip 29,32` select criteria; unknown or malformed ids and an empty selection exit 1 before anything runs, and skipped criteria appear as `SKIP` in the report. |
 | Live smoke | `scripts/run-test.sh specs/login.json <provider>/<model>` per provider | A real-model run of the login spec against the fixture site ends `PASSED`. This requires keys in `./secrets/`. |
 
 ### 14.1 CI
@@ -1638,8 +1644,8 @@ GitHub Actions mirrors the gate table; the workflows are the enforcement, the co
 
 | Workflow | Trigger | Runs |
 |---|---|---|
-| `.github/workflows/ci.yml` | every push to `main` and every PR | three parallel jobs on `ubuntu-24.04` — `npm run lint` + both typechecks, `npm run test:coverage` + `npm run ui:test`, and `npm run lint:shell` + `npm run lint:docker` — then a `CI` aggregate job that is the single required status check. Node 26, npm caches for root and `ui/`. |
-| `.github/workflows/acceptance.yml` | nightly 03:17 UTC, `workflow_dispatch` (optional `only` and `live_model` inputs), or a PR labelled `run-acceptance` (re-runs on later pushes to that PR) | `npm run test:acceptance` with `ACC_OUT=artifacts/acceptance-ci`, uploading `report.{json,md}` and writing the table to the job summary. The optional `live-smoke` job writes `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from repository secrets into `./secrets/`, requires `run.json` to say `PASSED`, and uploads `report.{json,md}` plus `chapters.json`. |
+| `.github/workflows/ci.yml` | every push to `main` and every PR | three parallel jobs on `ubuntu-24.04` — `bun run lint` + both typechecks, `bun run test:coverage` + `bun run ui:test`, and `bun run lint:shell` + `bun run lint:docker` — then a `CI` aggregate job that is the single required status check. Bun 1.4.1 (a clean `bun install --frozen-lockfile` takes seconds); Node 26 is only installed where the runtime needs it. |
+| `.github/workflows/acceptance.yml` | nightly 03:17 UTC, `workflow_dispatch` (optional `only` and `live_model` inputs), or a PR labelled `run-acceptance` (re-runs on later pushes to that PR) | `bun run test:acceptance` with `ACC_OUT=artifacts/acceptance-ci`, uploading `report.{json,md}` and writing the table to the job summary. The optional `live-smoke` job writes `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` from repository secrets into `./secrets/`, requires `run.json` to say `PASSED`, and uploads `report.{json,md}` plus `chapters.json`. |
 
 Notes:
 
@@ -1756,14 +1762,14 @@ The evaluator can only downgrade a run: its `MET` never passes a criterion witho
  browser (you) --http--> ui container (127.0.0.1:7070, React SPA + API)
                               |  token-authenticated HTTP
                               v
-                         runner daemon (host, npm run runner) --docker compose--> run pairs (§1)
+                         runner daemon (host, bun run runner) --docker compose--> run pairs (§1)
                               |
               ./data (requests, control)   ./artifacts (results)   shared by ui (ro artifacts) and runner
 ```
 
 ### 16.1 Runner Daemon (`src/runner/`, host process)
 
-- **Process.** Node 26 on the host (`npm run runner`). It is the only component that talks to Docker.
+- **Process.** Node 26 on the host (`bun run runner`). It is the only component that talks to Docker.
 - **Network.** It listens on `RUNNER_BIND` (default `127.0.0.1:7071`). On Linux, set it to the docker0 gateway (`172.17.0.1:7071`), because containers can't reach the host's loopback there. The UI reaches it at `http://host.docker.internal:7071`, with `extra_hosts: host-gateway`.
 - **Auth.** Every request needs `Authorization: Bearer <token>`, read from `./secrets/RUNNER_TOKEN` (generated on first start if absent). Comparison is constant-time.
 - **API:**

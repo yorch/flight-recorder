@@ -3,6 +3,7 @@ artifacts/
 data/
 ui/dist/
 coverage/
+.pi/
 secrets/*
 !secrets/.gitkeep
 .DS_Store

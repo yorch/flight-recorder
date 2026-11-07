@@ -1,5 +1,5 @@
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
 import type { EventInput, TimelineEvent } from '../../src/events.ts';
 import { activeChapter, buildChapters, runStatusForChapters, toVtt } from '../../src/postprocess/chapters.ts';
 import { chooseDuration } from '../../src/postprocess/duration.ts';

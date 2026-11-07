@@ -1,8 +1,8 @@
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it } from 'node:test';
 import { imageSizeOpenAI, OpenAIClient } from '../../src/agent/providers/openai.ts';
 
 const must = <T>(v: T | null | undefined): NonNullable<T> => {
@@ -108,7 +108,8 @@ describe('OpenAIClient.next', () => {
       fetchFn: (async () => new Response('{"output":[]}', { status: 200 })) as typeof fetch,
     });
     await assert.rejects(() => empty.next({ spec, observation: {} as never, history: [], schema: {} }), /no output text/);
-  });
+    // A 500 is retryable: postJson backs off four times before throwing (~7s).
+  }, 30_000);
 
   it('imageSize uses the OpenAI limiter', () => {
     const c = new OpenAIClient({ model: 'gpt-5', secretsDir: dir, fetchFn: fetch });

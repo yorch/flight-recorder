@@ -15,14 +15,15 @@ The harness verifies the outcome itself. It produces a condensed video with idle
 ## Requirements
 
 - Docker Desktop or Docker Engine with Compose v2+ (linux/amd64 or arm64)
-- Node.js ≥ 24.12 on the host (to run scripts and the gates; containers use Node 26)
+- Bun ≥ 1.4 as the package manager, test runner and script runner (`bun.lock` is the only lock)
+- Node.js ≥ 24.12 on the host (the runtime for the orchestrator, runner, server and scripts; containers use Node 26)
 - Model API keys as files: `secrets/ANTHROPIC_API_KEY` and/or `secrets/OPENAI_API_KEY`
 
 ## Quick Start
 
 ```bash
-npm ci
-npm run check                      # lint, typecheck, unit tests + coverage, shellcheck, hadolint
+bun install
+bun run check                      # lint, typecheck, unit tests + coverage, shellcheck, hadolint
 
 sh scripts/setup-test-secrets.sh   # test credentials matching the fixture login site
 
@@ -59,8 +60,8 @@ The `CI` aggregate check is the required status for branch protection. Actions a
 ## Acceptance Suite
 
 ```bash
-npm run test:acceptance            # all SPEC §11 criteria (about 20 minutes)
-npm run test:acceptance -- --only 5,17
+bun run test:acceptance            # all SPEC §11 criteria (about 20 minutes)
+bun run test:acceptance -- --only 5,17
 ```
 
 ## Roadmap

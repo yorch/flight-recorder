@@ -41,7 +41,10 @@ permissions:
   contents: read
 
 env:
+  # Node runs the orchestrator, runner and acceptance scripts; bun installs
+  # their dependencies. Keep BUN_VERSION in step with package.json.
   NODE_VERSION: '26'
+  BUN_VERSION: '1.4.1'
 
 jobs:
   acceptance:
@@ -63,8 +66,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: package-lock.json
+      # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
       # Criterion 1 needs cross-architecture emulation plus a container-driver
       # builder: the default `docker` driver cannot emit multiple platforms.
       # v3
@@ -87,7 +92,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Install
-        run: npm ci
+        run: bun install --frozen-lockfile
       - name: Fixture credentials
         run: sh scripts/setup-test-secrets.sh
       - name: Acceptance suite
@@ -149,8 +154,10 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: package-lock.json
+      # v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
@@ -189,7 +196,7 @@ jobs:
             printf '%s' "$OPENAI_API_KEY" > secrets/OPENAI_API_KEY
           fi
       - name: Install
-        run: npm ci
+        run: bun install --frozen-lockfile
       - name: Fixture credentials
         run: sh scripts/setup-test-secrets.sh
       - name: Live run (login spec, fixture site)

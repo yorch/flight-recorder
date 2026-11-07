@@ -1,5 +1,5 @@
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
 import type { Evaluation, Plan } from '../../src/agent/plan.ts';
 import type { TestSpec } from '../../src/config.ts';
 import { buildReportJson, escapeHtml, renderReportHtml } from '../../src/report/report.ts';

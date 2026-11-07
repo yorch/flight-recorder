@@ -1,0 +1,26 @@
+[test]
+# Per-test timeouts are set on the slow tests themselves (bun's CLI flag is
+# global and bunfig has no timeout key); the provider retry test legitimately
+# waits ~7s of exponential backoff.
+#
+# No coverageThreshold here: bun applies it per file and has no branch metric,
+# while SPEC §14's floors are aggregate. scripts/coverage-gate.ts enforces them
+# from the lcov report instead (lines ≥90%, functions ≥90%).
+coveragePathIgnorePatterns = [
+  'src/main.ts',
+  'src/session.ts',
+  'src/recorder.ts',
+  'src/cursor.ts',
+  'src/interaction.ts',
+  'src/agent/loop.ts',
+  'src/postprocess/render.ts',
+  'src/postprocess/cli.ts',
+  'src/runner/index.ts',
+  'src/runner/manager.ts',
+  'src/server/index.ts',
+  # Types only: bun instruments executable code, so this never appears and the
+  # gate would otherwise report it as missing.
+  'src/agent/contract.ts',
+  # Gate CLI glue: exercised by CI itself, not by unit tests.
+  'scripts/coverage-gate.ts',
+]

@@ -1,8 +1,8 @@
+import { describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it } from 'node:test';
 import { AnthropicClient, resizedSize, TIER_HIGH, TIER_STANDARD, tierFor } from '../../src/agent/providers/anthropic.ts';
 
 const must = <T>(v: T | null | undefined): NonNullable<T> => {

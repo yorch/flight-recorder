@@ -1,0 +1,18 @@
+# Build context hygiene for the root-context images (orchestrator, control
+# plane, e2e driver). Each image copies only what it needs; keeping run state,
+# secrets and the local dependency tree out of the context keeps builds fast.
+.git
+.github
+node_modules
+ui/node_modules
+ui/dist
+coverage
+artifacts
+data
+secrets
+spike
+docs
+.pi
+*.md
+*.log
+.DS_Store

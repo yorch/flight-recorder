@@ -1,9 +1,9 @@
+import { afterAll, describe, it } from 'bun:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { after, describe, it } from 'node:test';
 import { RUN_ID_RE } from '../../src/runner/request.ts';
 import { createApiHandler, listArtifacts, type RunnerClient } from '../../src/server/api.ts';
 import { buildSpec, FormError, newRunId, resolveModel, sanitizeFilename, stubScriptText } from '../../src/server/form.ts';
@@ -254,7 +254,7 @@ describe('api handler over a real http server', () => {
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     port = (server.address() as { port: number }).port;
   });
-  after(() => new Promise<void>((r) => server.close(() => r())));
+  afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
   it('rejects a wrong Host with 421', async () => {
     assert.equal((await api('GET', '/api/runs', { host: 'evil.test:1' })).code, 421);
