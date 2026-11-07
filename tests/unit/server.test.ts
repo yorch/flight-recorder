@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { RUN_ID_RE } from '../../src/runner/request.ts';
-import { createApiHandler, type RunnerClient } from '../../src/server/api.ts';
+import { createApiHandler, listArtifacts, type RunnerClient } from '../../src/server/api.ts';
 import { buildSpec, FormError, newRunId, resolveModel, sanitizeFilename, stubScriptText } from '../../src/server/form.ts';
 import { ARTIFACT_CSP, hostAllowed, mutationGuard, originAllowed, resolveUnder } from '../../src/server/guards.ts';
 import { parseMultipart } from '../../src/server/multipart.ts';
@@ -21,6 +21,22 @@ describe('sanitizeFilename', () => {
     assert.equal(sanitizeFilename('..'), null);
     assert.equal(sanitizeFilename('...'), null);
     assert.equal(sanitizeFilename('/'), null);
+  });
+});
+
+describe('listArtifacts', () => {
+  it('lists only existing files (top level, logs/, agent/) with sizes; skips dirs and other subdirs', () => {
+    const art = tmp();
+    assert.deepEqual(listArtifacts(path.join(art, 'missing')), []);
+    fs.writeFileSync(path.join(art, 'run.json'), '{}');
+    fs.mkdirSync(path.join(art, 'logs'));
+    fs.writeFileSync(path.join(art, 'logs', 'proxy-access.log'), 'abc');
+    fs.mkdirSync(path.join(art, 'screenshots'));
+    fs.writeFileSync(path.join(art, 'screenshots', 's0001.png'), 'x');
+    assert.deepEqual(listArtifacts(art), [
+      { file: 'run.json', bytes: 2 },
+      { file: 'logs/proxy-access.log', bytes: 3 },
+    ]);
   });
 });
 

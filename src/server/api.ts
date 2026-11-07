@@ -120,6 +120,24 @@ type TimelineEventLike = {
   error?: string;
 };
 
+/** Files that actually exist in the run's artifact dir (top level, logs/, agent/), with sizes. */
+export function listArtifacts(art: string): { file: string; bytes: number }[] {
+  const out: { file: string; bytes: number }[] = [];
+  for (const sub of ['', 'logs', 'agent']) {
+    let names: string[] = [];
+    try {
+      names = fs.readdirSync(path.join(art, sub));
+    } catch {
+      continue;
+    }
+    for (const name of names.sort()) {
+      const st = fs.statSync(path.join(art, sub, name), { throwIfNoEntry: false });
+      if (st?.isFile()) out.push({ file: sub ? `${sub}/${name}` : name, bytes: st.size });
+    }
+  }
+  return out;
+}
+
 /**
  * §16.3 live progress: everything the harness currently knows about a run,
  * derived from status.json, plan.json, events.jsonl, agent/transcript.jsonl and
@@ -369,6 +387,7 @@ export function createApiHandler(deps: ServerDeps) {
       report: readJsonFile(path.join(art, 'report.json')) ?? null,
       events,
       progress: computeProgress(art),
+      artifacts: listArtifacts(art),
     };
   };
 

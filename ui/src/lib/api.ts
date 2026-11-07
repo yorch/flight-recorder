@@ -144,6 +144,7 @@ export interface RunDetail {
   report: Report | null;
   events: { count: number; tail: unknown[] };
   progress: LiveProgress | null;
+  artifacts?: { file: string; bytes: number }[];
 }
 
 export interface Chapter {

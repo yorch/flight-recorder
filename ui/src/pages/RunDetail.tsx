@@ -203,7 +203,7 @@ export function RunDetailPage({ id }: { id: string }) {
       <TabPanel id="artifacts" active={tab}>
         <div className="split">
           <EgressPanel egress={egress} />
-          {detail && <ArtifactsPanel runId={id} />}
+          {detail && <ArtifactsPanel runId={id} files={detail.artifacts ?? []} terminal={terminal} />}
         </div>
       </TabPanel>
     </div>
