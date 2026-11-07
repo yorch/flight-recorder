@@ -71,14 +71,16 @@ class HttpError extends Error {
   }
 }
 
+type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+
 const json = (res: ServerResponse, code: number, body: unknown): void => {
   res.writeHead(code, { 'content-type': 'application/json', 'x-content-type-options': 'nosniff' });
   res.end(JSON.stringify(body));
 };
 
-const readJsonFile = (file: string): unknown => {
+const readJsonFile = (file: string): Json | undefined => {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    return JSON.parse(fs.readFileSync(file, 'utf8')) as Json;
   } catch {
     return undefined;
   }
@@ -234,15 +236,17 @@ const atomicWrite = (file: string, text: string): void => {
 };
 
 /** Form fields may arrive as JSON text (multipart) or native values (JSON body). */
-const fieldValue = (v: unknown): unknown => {
-  if (typeof v !== 'string') return v;
-  const t = v.trim();
-  if (t === '') return undefined;
-  try {
-    return JSON.parse(t);
-  } catch {
-    return t;
+const fieldValue = (v: unknown): Json | undefined => {
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (t === '') return undefined;
+    try {
+      return JSON.parse(t) as Json;
+    } catch {
+      return t;
+    }
   }
+  return v as Json | undefined;
 };
 
 const fieldList = (v: unknown): string[] | undefined => {
@@ -577,7 +581,7 @@ export function createApiHandler(deps: ServerDeps) {
   const serveStatic = (res: ServerResponse, pathname: string) => {
     const index = path.join(deps.uiDist, 'index.html');
     if (!fs.existsSync(index)) {
-      return json(res, 200, { ok: true, service: 'browser-agent-ui', ui: 'not built' });
+      return json(res, 200, { ok: true, service: 'flight-recorder-ui', ui: 'not built' });
     }
     const rel = pathname === '/' ? ['index.html'] : pathname.split('/').filter(Boolean);
     const abs = resolveUnder(deps.uiDist, rel);

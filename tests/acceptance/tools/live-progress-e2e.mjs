@@ -5,7 +5,7 @@
 // Runs inside docker/e2e; same loopback relay as ui-e2e.mjs so the page origin
 // stays 127.0.0.1:7070 and satisfies the Host/Origin guards.
 // Usage: docker run --rm --add-host host.docker.internal:host-gateway \
-//   -e E2E_RUN_ID=<id> --entrypoint node browser-agent-e2e /e2e/live-progress-e2e.mjs
+//   -e E2E_RUN_ID=<id> --entrypoint node flight-recorder-e2e /e2e/live-progress-e2e.mjs
 // Prints progress lines and a final `E2E_RESULT {json}`; exit 0 on pass.
 
 import net from 'node:net';

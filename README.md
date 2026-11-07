@@ -1,6 +1,6 @@
-# Autonomous AI Browser Testing
+# Flight Recorder
 
-An AI agent drives a real, sandboxed Chrome to execute a browser test, and the platform records the run:
+An AI agent drives a real, sandboxed Chrome to execute a browser test, and the harness records and judges the run:
 
 - screen video;
 - event timeline;

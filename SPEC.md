@@ -1,4 +1,4 @@
-# Technical Specification: Autonomous AI Browser Testing & Smart Recording Agent
+# Technical Specification: Flight Recorder — AI-Agent Browser Testing & Smart Recording
 
 ## 0. Scope
 
@@ -413,7 +413,7 @@ Rules and properties (all verified in the proxy spike, §13.2):
 ### 2.5 Composition (`docker-compose.yml`)
 
 ```yaml
-name: browser-agent
+name: flight-recorder
 
 networks:
   sandbox:

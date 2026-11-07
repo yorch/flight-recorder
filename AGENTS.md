@@ -4,7 +4,7 @@ Read this first, then `SPEC.md`, which is the source of truth for architecture, 
 
 ## What This Project Is
 
-An AI-agent-driven browser testing platform.
+An AI-agent-driven browser testing platform; the console brands it **Flight Recorder** and package, compose and image names follow that.
 
 - **Execution:** an LLM/VLM agent drives a real, sandboxed, headful Chrome to execute a test goal.
 - **Evidence:** everything is recorded (screen video, event timeline, screenshots, transcript), and the harness, not the agent, decides pass/fail.

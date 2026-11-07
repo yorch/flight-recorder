@@ -46,7 +46,7 @@ export function Rail({ route, onHelp }: { route: Route; onHelp: () => void }) {
         </span>
         <span className="brand-text">
           <strong>Flight Recorder</strong>
-          <small>browser agent QA console</small>
+          <small>browser QA console</small>
         </span>
       </a>
       <nav className="rail-nav" aria-label="Main navigation">

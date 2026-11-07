@@ -1119,9 +1119,9 @@ const CRITERIA: Criterion[] = [
           }
         }
         ev.health = health;
-        const build = sh('docker build -f docker/e2e/Dockerfile -t browser-agent-e2e .');
+        const build = sh('docker build -f docker/e2e/Dockerfile -t flight-recorder-e2e .');
         ev.e2eBuild = build.code;
-        const e2e = sh('docker run --rm --add-host host.docker.internal:host-gateway -v "$PWD/tests:/tests:ro" browser-agent-e2e');
+        const e2e = sh('docker run --rm --add-host host.docker.internal:host-gateway -v "$PWD/tests:/tests:ro" flight-recorder-e2e');
         ev.e2eExit = e2e.code;
         const m = /E2E_RESULT (.*)/.exec(e2e.out);
         ev.result = m ? (JSON.parse(m[1]) as Record<string, unknown>) : { tail: e2e.out.slice(-1500) };
@@ -1279,9 +1279,9 @@ const CRITERIA: Criterion[] = [
 
         // UI: the dockerized driver asserts the live view renders and updates
         // without a reload while the run is still running.
-        ev.e2eBuild = sh('docker build -f docker/e2e/Dockerfile -t browser-agent-e2e .').code;
+        ev.e2eBuild = sh('docker build -f docker/e2e/Dockerfile -t flight-recorder-e2e .').code;
         const e2e = sh(
-          `docker run --rm --add-host host.docker.internal:host-gateway -e E2E_RUN_ID=${runId} --entrypoint node browser-agent-e2e /e2e/live-progress-e2e.mjs`,
+          `docker run --rm --add-host host.docker.internal:host-gateway -e E2E_RUN_ID=${runId} --entrypoint node flight-recorder-e2e /e2e/live-progress-e2e.mjs`,
         );
         ev.e2eExit = e2e.code;
         const m = /E2E_RESULT (.*)/.exec(e2e.out);

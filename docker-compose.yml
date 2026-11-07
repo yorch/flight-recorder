@@ -1,8 +1,9 @@
-name: browser-agent
+name: flight-recorder
 
 networks:
   sandbox:
-    internal: true # no route out and no upstream DNS: the proxy is the only exit
+    # no route out and no upstream DNS: the proxy is the only exit
+    internal: true
   egress: {}
 
 services:
@@ -17,17 +18,22 @@ services:
       - proxy-logs:/var/log/squid-pair
     environment:
       TEST_FILE: ${TEST_FILE:?TEST_FILE must be set}
-      AGENT_EGRESS_HOSTS: ${AGENT_EGRESS_HOSTS:?AGENT_EGRESS_HOSTS must be set} # model API host[:port], comma-separated
-      UPSTREAM_PROXY: ${UPSTREAM_PROXY:-}                                    # optional parent proxy host:port
-      UPSTREAM_BYPASS: ${UPSTREAM_BYPASS:-}                                   # comma-separated hosts fetched direct even with a parent
+      # model API host[:port], comma-separated
+      AGENT_EGRESS_HOSTS: ${AGENT_EGRESS_HOSTS:?AGENT_EGRESS_HOSTS must be set}
+      UPSTREAM_PROXY: ${UPSTREAM_PROXY:-} # optional parent proxy host:port
+      # hosts fetched direct even with a parent
+      UPSTREAM_BYPASS: ${UPSTREAM_BYPASS:-}
 
   browser:
     build: ./docker/browser
     init: true
     ipc: shareable
-    shm_size: 2gb # Chrome renderers use /dev/shm; Docker's 64 MB default causes tab crashes
-    # Chrome's sandbox needs user-namespace syscalls (Playwright's profile = Docker default + clone/setns/unshare).
-    # cap_drop: [ALL] and no-new-privileges break the sandboxed zygote (sys_chroot fails), so they are not set here.
+    # Chrome renderers use /dev/shm; Docker's 64 MB default causes tab crashes
+    shm_size: 2gb
+    # Chrome's sandbox needs user-namespace syscalls (Playwright's profile =
+    # Docker default + clone/setns/unshare). cap_drop: [ALL] and
+    # no-new-privileges break the sandboxed zygote (sys_chroot fails), so they
+    # are not set here.
     security_opt:
       - seccomp=./docker/browser/seccomp_profile.json
     networks: [sandbox]
@@ -73,7 +79,8 @@ services:
       RUN_ID: ${RUN_ID:?RUN_ID must be set}
       TEST_FILE: ${TEST_FILE:?TEST_FILE must be set}
       AGENT_MODEL: ${AGENT_MODEL:?AGENT_MODEL must be set}
-      # Node's built-in fetch/http honour these only with NODE_USE_ENV_PROXY=1 (Node 24+).
+      # Node's built-in fetch/http honour these only with
+      # NODE_USE_ENV_PROXY=1 (Node 24+).
       NODE_USE_ENV_PROXY: "1"
       HTTP_PROXY: http://proxy:3129
       HTTPS_PROXY: http://proxy:3129
