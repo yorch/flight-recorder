@@ -62,6 +62,9 @@ const runTest = (spec: string, stub: string, env: NodeJS.ProcessEnv = {}): RunRe
   const r = sh(`sh scripts/run-test.sh ${spec} stub//tests/stub/${stub}`, { ...env, COMPOSE_OVERLAYS: overlays });
   const m = /artifacts: artifacts\/(\S+)/.exec(r.out);
   const runId = m ? m[1] : '';
+  // CI logs only see stdout; a failing run must print why (run-test.sh appends
+  // the compose project's logs on a non-zero exit).
+  if (r.code !== 0) console.log(`[run ${runId || '?'}] exit ${r.code}\n${r.out.slice(-6000)}`);
   return { code: r.code, runId, dir: `artifacts/${runId}`, out: r.out };
 };
 const runJson = (d: string) => JSON.parse(fs.readFileSync(`${d}/run.json`, 'utf8'));
