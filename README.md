@@ -81,6 +81,21 @@ Two things that bite on Linux: the console container reaches the runner through
 `host.docker.internal`, so bind the daemon to the bridge gateway (`RUNNER_BIND=172.17.0.1:7071`), and without
 `FIXTURES=1` the `*.test` hosts do not resolve.
 
+### Exposing the console beyond localhost
+
+The console is localhost-only by design and the API has no user auth of its own (SPEC §16.2), so a public
+entry point needs an authenticating front. Point the tunnel at the gate, not at the console:
+
+```bash
+node scripts/ui-gate.ts      # 127.0.0.1:7072 -> 127.0.0.1:7070, HTTP basic auth
+```
+
+The password is generated into `secrets/UI_TOKEN` on first start (mode 0600) and the gate forwards `Host` and
+`Origin` unchanged, so the public hostname must be listed in `UI_ALLOWED_HOSTS` when the console starts. Put
+Cloudflare Access in front of the hostname and the gate will accept a signed Access session instead of prompting
+for basic auth (one login, not two): set `GATE_ACCESS_TEAM_DOMAIN` and `GATE_ACCESS_AUD` — see AGENTS.md for the
+details. A Cloudflare Tunnel is only one option; any reverse proxy that authenticates works.
+
 Results land in `artifacts/<run_id>/`:
 
 | File | Contents |

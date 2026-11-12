@@ -27,6 +27,14 @@ To use the platform: `sh scripts/setup-test-secrets.sh`, start the runner (`bun 
 
 The runner reads `./secrets/RUNNER_TOKEN` (auto-generated on first start) and drives `docker compose` via `execFile` only — no shell. Request dirs live in `./data/requests/<run_id>/` (`request.json`, `spec.json`, `assets/`, `control/`, `stub/`). The UI writes them; the runner mounts them at `/run-input` and `/control` via a generated `compose.run.yml` overlay.
 
+### Exposing the console through a tunnel
+
+`docker-compose.ui.yml` publishes on `127.0.0.1` only and the control plane has no user auth of its own (§16.2), so anything tunnelled to it goes through `scripts/ui-gate.ts` first: it listens on loopback, enforces HTTP basic auth, and streams requests to `:7070` while preserving `Host`/`Origin` so the §16.2 guards still see the tunnel hostname (add that hostname to `UI_ALLOWED_HOSTS`). Its password lives in `secrets/UI_TOKEN` (auto-generated, mode 0600) — a name the API ignores when it lists run credentials, so the tunnel password can never be offered as a secret for a run to type into a page.
+
+A Cloudflare Tunnel should point at the gate, never at the console. With Cloudflare Access in front of the hostname, Access signs every forwarded request with `Cf-Access-Jwt-Assertion`; the gate verifies that RS256 assertion against the team JWKS (`scripts/access-jwt.ts`, cached) and lets a valid one through without the basic-auth prompt, so there is one login, not two. Configure it with `GATE_ACCESS_TEAM_DOMAIN` and `GATE_ACCESS_AUD` (the application's AUD tag); with them unset the gate is basic-auth only. Creating the Access application and policy needs a Cloudflare API token carrying *Access: Apps and Policies: Edit* — a tunnel's own `cert.pem` credential cannot do it (`auth.forbidden`).
+
+Host notes for a Linux box: the runner has to bind the bridge gateway (§16.1), and host firewalls that drop container → host traffic (e.g. `ufw` with its default policies) surface as `502 runner refused the run` when the console submits a run — allow the runner port from the docker bridge range. A newly granted `docker` group membership also does not reach a login session that predates it; start the runner from a session that has the group.
+
 ## Repository Layout
 
 ```text
@@ -106,7 +114,7 @@ artifacts/               gitignored run outputs
 - **Prompt text:** `src/agent/prompt.ts` (and, later, planner/evaluator prompts and any eval rubric) is lead-authored. Don't change the wording casually; changes need review.
 - **Spec sync:** the `gen-squid-conf` script in SPEC §2.4 must stay **byte-identical** to `docker/proxy/gen-squid-conf`.
 - **hadolint:** ignores are inline (`# hadolint ignore=DL3008[,DL4006]`) with the reason in SPEC §14. There is no `.hadolint.yaml`.
-- **Commits:** conventional style (`feat:`, `docs:`, `chore:`) with the Devin trailer. Never commit `secrets/*` (except `.gitkeep`) or `artifacts/`.
+- **Commits:** conventional style (`feat:`, `docs:`, `chore:`). Never commit `secrets/*` (except `.gitkeep`) or `artifacts/`.
 
 ## Hard-Won Gotchas (Don't Rediscover These)
 
@@ -114,6 +122,8 @@ artifacts/               gitignored run outputs
 
 - Headful Chrome binds CDP to loopback only. That is why the orchestrator shares the browser's network namespace.
 - `cap_drop: ALL` and `no-new-privileges` on the browser container break Chrome's sandboxed zygote (`sys_chroot` fails). Use Playwright's seccomp profile instead; the sandbox is on.
+- Playwright's profile verbatim lacks the syscalls modern `runc` needs (`openat2`, `clone3`, `close_range`, `faccessat2`, `mount_setattr`, …). On a Linux host with runc ≥ 1.5 and kernel ≥ 6.x the browser container dies before exec with `SIGSEGV` in `runc` init (`libpathrs`), and the orchestrator then fails with `bind-mount /proc/<pid>/ns/net -> /var/run/docker/netns/…: no such file or directory`. `docker/browser/seccomp_profile.json` is therefore Playwright's profile plus an appended block of the syscalls current Docker's default allows — all of them stock Docker permissions, not new capabilities.
+- Reproduce a profile problem without the suite: `docker run --rm --security-opt seccomp=./docker/browser/seccomp_profile.json alpine sh -c true`.
 - WebGL is `null` under `--disable-gpu`. `CHROME_WEBGL=1` needs `--use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist --disable-gpu-sandbox`.
 
 **Squid**
