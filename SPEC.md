@@ -73,7 +73,7 @@ Networks:
 
 ### Core Architecture Components
 
-1. **Browser container:** Xvfb virtual display (`:99`), the Openbox window manager and Chrome in kiosk mode, supervised by supervisord. Chrome runs with its own sandbox enabled, using Playwright's seccomp profile. Its DevTools Protocol (CDP) endpoint listens on `127.0.0.1:9222`, which is reachable only from inside the shared network namespace.
+1. **Browser container:** Xvfb virtual display (`:99`), the Openbox window manager and Chrome in kiosk mode, supervised by supervisord. Chrome runs with its own sandbox enabled, using Playwright's seccomp profile. Its DevTools Protocol (CDP) endpoint listens on `127.0.0.1:9222`, which is reachable only from inside the shared network namespace. The profile is Playwright's, extended additively with the syscalls current Docker's default profile allows: the verbatim copy omits `openat2`/`clone3`/`close_range`/`faccessat2` and friends, which `runc` ≥ 1.5 itself needs before exec, so on a Linux host with kernel ≥ 6.x the browser container dies with a `SIGSEGV` inside `runc`'s init (`libpathrs`) and the orchestrator then fails to join its network namespace.
 2. **Orchestrator container:** Runs the agent loop and drives Chrome over CDP with Playwright: element actions, coordinate clicks (`page.mouse`), keyboard, screenshots and aria snapshots. `xdotool` only glides the real X cursor to the target so it is visible in the recording. The container also records the display with `ffmpeg`, writes the event log, and runs post-processing after the run.
 3. **Shared namespaces:** `network_mode: service:browser` lets the orchestrator reach CDP on loopback (headful Chrome always binds CDP to loopback and ignores `--remote-debugging-address`). `ipc: service:browser` lets `ffmpeg` use MIT-SHM for capture. A shared volume carries the X11 socket. This maps directly onto a two-container Kubernetes pod.
 4. **Timeline (`events.jsonl`):** One JSON object per line, timestamped from a single clock that is anchored to the video's first frame (§4).
@@ -91,7 +91,7 @@ docker/browser/
   supervisord.conf
   start-chrome
   wait-for-x
-  seccomp_profile.json      # verbatim copy of Playwright v1.64.1 utils/docker/seccomp_profile.json
+  seccomp_profile.json      # Playwright v1.64.1 profile + the syscalls current Docker's default allows (§2.5)
 docker/proxy/
   Dockerfile
   gen-squid-conf            # TestSpec -> squid.conf, then runs Squid

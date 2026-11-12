@@ -26,4 +26,7 @@ coveragePathIgnorePatterns = [
   'scripts/coverage-gate.ts',
   'scripts/site/build-docs.ts',
   'scripts/site/check-links.ts',
+  # Tunnel gate for the control plane: host deploy glue (sockets + proxying), smoke-
+  # tested through the tunnel (AGENTS.md, "exposing the console"), not by unit tests.
+  'scripts/ui-gate.ts',
 ]
